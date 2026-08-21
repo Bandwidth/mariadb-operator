@@ -5467,7 +5467,11 @@ spec:
                             type: boolean
                         type: object
                       serverIdOffset:
-                        description: ServerIdOffset to be used on the replicas.
+                        description: |-
+                          ServerIdOffset to be used on the replicas. Each replica gets server_id = podIndex + offset.
+                          If not set, the operator auto-discovers a non-colliding offset by querying the external MariaDB
+                          for the server ids already in use, leaving room above them for scale out and other clusters. The
+                          discovered value is persisted to status.externalReplication.serverIdOffset and computed only once.
                         type: integer
                     required:
                     - mariaDbRef
@@ -6753,6 +6757,16 @@ spec:
                   from spec.image. This can happen if the image uses a digest (e.g. sha256) instead
                   of a version tag.
                 type: string
+              externalReplication:
+                description: ExternalReplication is the status of external replication.
+                properties:
+                  serverIdOffset:
+                    description: |-
+                      ServerIdOffset is the server_id offset auto-discovered by querying the external MariaDB for the
+                      server ids already in use. It is computed only once and persisted here so it stays stable and
+                      does not need to be queried again. It is not set when a manual serverIdOffset is configured.
+                    type: integer
+                type: object
               galeraRecovery:
                 description: GaleraRecovery is the Galera recovery current state.
                 properties:

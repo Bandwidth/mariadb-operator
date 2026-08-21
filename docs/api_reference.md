@@ -2642,7 +2642,7 @@ _Appears in:_
 | `connectionTimeout` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.36/#duration-v1-meta)_ | ConnectionTimeout to be used when the replica connects to the primary. |  |  |
 | `connectionRetries` _integer_ | ConnectionRetries to be used when the replica connects to the primary. |  |  |
 | `healthCheckInterval` _[Duration](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.36/#duration-v1-meta)_ | HealthCheckInterval to be used when the replica connects to the primary. |  |  |
-| `serverIdOffset` _integer_ | ServerIdOffset to be used on the replicas. |  |  |
+| `serverIdOffset` _integer_ | ServerIdOffset to be used on the replicas. Each replica gets server_id = podIndex + offset.<br />If not set, the operator auto-discovers a non-colliding offset by querying the external MariaDB<br />for the server ids already in use, leaving room above them for scale out and other clusters. The<br />discovered value is persisted to status.externalReplication.serverIdOffset and computed only once. |  |  |
 | `filteredReplicaTables` _string array_ | FilteredReplicaTables is an optional list of tables in "database.table" format to replicate.<br />When set, the logical backup will only include these tables and the replication will be<br />configured with replicate_do_table for each entry. GTID strict mode is automatically<br />disabled when this field is set, as partial replication is incompatible with it. |  |  |
 
 

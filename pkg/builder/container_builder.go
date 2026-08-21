@@ -567,7 +567,7 @@ func replicationEnv(mariadb *mariadbv1alpha1.MariaDB) ([]corev1.EnvVar, error) {
 
 	var env []corev1.EnvVar
 	if mariadb.Replication().ReplicaFromExternal != nil {
-		env = append(env, externalReplEnvVars(mariadb.Replication().ReplicaFromExternal)...)
+		env = append(env, externalReplEnvVars(mariadb)...)
 	}
 
 	replication := ptr.Deref(mariadb.Spec.Replication, mariadbv1alpha1.Replication{})
@@ -643,10 +643,15 @@ func mariadbReplEnv(mariadb *mariadbv1alpha1.MariaDB) ([]corev1.EnvVar, error) {
 	return env, nil
 }
 
-func externalReplEnvVars(ext *mariadbv1alpha1.ReplicaFromExternal) []corev1.EnvVar {
+func externalReplEnvVars(mariadb *mariadbv1alpha1.MariaDB) []corev1.EnvVar {
+	ext := mariadb.Replication().ReplicaFromExternal
+	// Effective offset: manual spec value if set, otherwise the auto-discovered value persisted in
+	// status. It falls back to 0 as a safeguard; in practice the status discovery persists the offset
+	// before the StatefulSet is ever built, so a real value is always present here.
+	offset := ptr.Deref(mariadb.ExternalReplServerIdOffset(), 0)
 	env := []corev1.EnvVar{
 		{Name: "MARIADB_EXTERNAL_REPL_ENABLED", Value: fmt.Sprint(true)},
-		{Name: "MARIADB_EXTERNAL_REPL_SERVER_ID_OFFSET", Value: fmt.Sprint(*ext.ServerIdOffset)},
+		{Name: "MARIADB_EXTERNAL_REPL_SERVER_ID_OFFSET", Value: fmt.Sprint(offset)},
 	}
 	if ext.HasFilteredTables() {
 		env = append(env, corev1.EnvVar{

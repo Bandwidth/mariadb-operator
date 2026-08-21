@@ -376,13 +376,44 @@ default_storage_engine=InnoDB
 binlog_format=row
 log_bin=ON
 innodb_autoinc_lock_mode=2
-max_allowed_packet=256M`),
+max_allowed_packet=256M
+binlog_expire_logs_seconds=300`),
 			Port: 3306,
+			// Native replication so the emulated external exposes a primary and a secondary service.
+			// This lets the server_id offset auto-discovery tests point one ExternalMariaDB at the
+			// primary (master endpoint) and another at the secondary (slave endpoint, followed to the
+			// primary). AutoFailover is disabled to keep pod-0 the stable primary during the tests.
+			Replication: &mariadbv1alpha1.Replication{
+				ReplicationSpec: mariadbv1alpha1.ReplicationSpec{
+					Primary: mariadbv1alpha1.PrimaryReplication{
+						PodIndex:     ptr.To(0),
+						AutoFailover: ptr.To(false),
+					},
+				},
+				Enabled: true,
+			},
+			Replicas: 2,
 			Service: &mariadbv1alpha1.ServiceTemplate{
 				Type: corev1.ServiceTypeLoadBalancer,
 				Metadata: &mariadbv1alpha1.Metadata{
 					Annotations: map[string]string{
 						"metallb.io/loadBalancerIPs": testCidrPrefix + ".0.47",
+					},
+				},
+			},
+			PrimaryService: &mariadbv1alpha1.ServiceTemplate{
+				Type: corev1.ServiceTypeLoadBalancer,
+				Metadata: &mariadbv1alpha1.Metadata{
+					Annotations: map[string]string{
+						"metallb.io/loadBalancerIPs": testCidrPrefix + ".0.205",
+					},
+				},
+			},
+			SecondaryService: &mariadbv1alpha1.ServiceTemplate{
+				Type: corev1.ServiceTypeLoadBalancer,
+				Metadata: &mariadbv1alpha1.Metadata{
+					Annotations: map[string]string{
+						"metallb.io/loadBalancerIPs": testCidrPrefix + ".0.206",
 					},
 				},
 			},
@@ -398,7 +429,7 @@ max_allowed_packet=256M`),
 	applyMariadbTestConfig(&emulateExternalMdb)
 	Expect(k8sClient.Create(ctx, &emulateExternalMdb)).To(Succeed())
 	expectMariadbReady(ctx, k8sClient, testEmulateExternalMdbkey)
-	setGtidBinlogState(ctx, k8sClient, testEmulateExternalMdbkey, "0-1-1000")
+	populateEmulatedExternalMariaDB(ctx, k8sClient, testEmulateExternalMdbkey, "0-1-1000")
 
 	emdb := mariadbv1alpha1.ExternalMariaDB{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1514,19 +1545,33 @@ func expectMariadbReady(ctx context.Context, k8sClient client.Client, key types.
 	})
 }
 
-func setGtidBinlogState(ctx context.Context, k8sClient client.Client, key types.NamespacedName, state string) {
+func populateEmulatedExternalMariaDB(ctx context.Context, k8sClient client.Client, key types.NamespacedName, state string) {
 	Eventually(func(g Gomega) bool {
 		var mdb mariadbv1alpha1.MariaDB
 		g.Expect(k8sClient.Get(ctx, key, &mdb)).To(Succeed())
-		client, err := sql.NewClientWithMariaDB(ctx, &mdb, refresolver.New(k8sClient))
+		client, err := sql.NewClientWithMariaDB(ctx, &mdb, refresolver.New(k8sClient), sql.WithMultiStatements(true))
 		if err != nil {
 			return false
 		}
 		defer client.Close()
-
+		sqlCommand := `
+		SET SESSION gtid_seq_no = 1000;
+		BEGIN;
+		CREATE DATABASE inttest;
+		COMMIT;
+		USE inttest;
+		CREATE TABLE IF NOT EXISTS t (id INT PRIMARY KEY);
+		`
 		g.Expect(
-			client.Exec(ctx, "RESET MASTER;"),
-			client.Exec(ctx, "SET GLOBAL gtid_binlog_state = ?;", state),
+			client.Exec(ctx, sqlCommand),
+		).To(Succeed())
+		time.Sleep(2 * time.Second)
+		sqlCommand = `
+		FLUSH LOGS;
+		PURGE BINARY LOGS BEFORE DATE_ADD(NOW(), INTERVAL 1 MINUTE);
+		`
+		g.Expect(
+			client.Exec(ctx, sqlCommand),
 		).To(Succeed())
 		return true
 	}, testHighTimeout, testInterval).Should(BeTrue())

@@ -1,7 +1,7 @@
 {
     "name": "Go",
     // TODO: bump when available, see: https://github.com/devcontainers/images/tree/main/src/go
-    "image": "mcr.microsoft.com/devcontainers/go:1.25-bookworm",
+    "image": "mcr.microsoft.com/devcontainers/go:1.26-bookworm",
     "features": {
         "ghcr.io/devcontainers/features/docker-in-docker:3.0.1": {
             "moby": true,

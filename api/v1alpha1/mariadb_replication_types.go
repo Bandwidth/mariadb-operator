@@ -242,7 +242,10 @@ type ReplicaFromExternal struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:number"}
 	HealthCheckInterval *metav1.Duration `json:"healthCheckInterval,omitempty"`
-	// ServerIdOffset to be used on the replicas.
+	// ServerIdOffset to be used on the replicas. Each replica gets server_id = podIndex + offset.
+	// If not set, the operator auto-discovers a non-colliding offset by querying the external MariaDB
+	// for the server ids already in use, leaving room above them for scale out and other clusters. The
+	// discovered value is persisted to status.externalReplication.serverIdOffset and computed only once.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	ServerIdOffset *int `json:"serverIdOffset,omitempty"`
@@ -403,9 +406,8 @@ func (r *ReplicaFromExternal) FillWithDefaults() {
 			Duration: 15 * time.Second,
 		}
 	}
-	if r.ServerIdOffset == nil {
-		r.ServerIdOffset = ptr.To(0)
-	}
+	// ServerIdOffset is intentionally not defaulted: a nil value signals that the operator should
+	// auto-discover a non-colliding offset by querying the external MariaDB (see MariaDB.ExternalReplServerIdOffset).
 }
 
 // IsExternalReplication returns true is external replication is defined
@@ -743,6 +745,35 @@ type ReplicationStatus struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=status
 	GtidStrictModePaused *bool `json:"gtidStrictModePaused,omitempty"`
+}
+
+// ExternalReplicationStatus is the status of external replication.
+type ExternalReplicationStatus struct {
+	// ServerIdOffset is the server_id offset auto-discovered by querying the external MariaDB for the
+	// server ids already in use. It is computed only once and persisted here so it stays stable and
+	// does not need to be queried again. It is not set when a manual serverIdOffset is configured.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=status
+	ServerIdOffset *int `json:"serverIdOffset,omitempty"`
+}
+
+// ExternalReplServerIdOffset returns the effective server_id offset for external replication:
+// the manual spec value when set, otherwise the auto-discovered value persisted in status, otherwise nil.
+func (m *MariaDB) ExternalReplServerIdOffset() *int {
+	if !m.IsReplicationEnabled() {
+		return nil
+	}
+	replication := m.Replication()
+	if !replication.IsExternalReplication() {
+		return nil
+	}
+	if replication.ReplicaFromExternal.ServerIdOffset != nil {
+		return replication.ReplicaFromExternal.ServerIdOffset
+	}
+	if m.Status.ExternalReplication != nil {
+		return m.Status.ExternalReplication.ServerIdOffset
+	}
+	return nil
 }
 
 // UseStandaloneProbes indicates whether to use the default non-HA startup and liveness probes.

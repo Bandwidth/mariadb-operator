@@ -49,6 +49,8 @@ type Opts struct {
 	TLSClientPrivateKey []byte
 	CustomTLSCAName     string
 
+	MultiStatements bool
+
 	Params  map[string]string
 	Timeout *time.Duration
 }
@@ -139,6 +141,12 @@ func WithParams(params map[string]string) Opt {
 func WithTimeout(d time.Duration) Opt {
 	return func(o *Opts) {
 		o.Timeout = &d
+	}
+}
+
+func WithMultiStatements(multiStatements bool) Opt {
+	return func(o *Opts) {
+		o.MultiStatements = multiStatements
 	}
 }
 
@@ -290,6 +298,9 @@ func BuildDSN(opts Opts) (string, error) {
 	}
 	if opts.Params != nil {
 		config.Params = opts.Params
+	}
+	if opts.MultiStatements {
+		config.MultiStatements = opts.MultiStatements
 	}
 	if (opts.MariadbName != "" || opts.MaxscaleName != "" || opts.ExternalMariadbName != "") && opts.Namespace != "" && opts.TLSCACert != nil {
 		configName, err := configureTLS(opts)
@@ -1074,6 +1085,58 @@ func (c Client) HasConnectedReplicas(ctx context.Context) (bool, error) {
 	return false, nil
 }
 
+// ReplicationMasterEndpoint returns the host and port of the primary this server replicates from,
+// as reported by SHOW REPLICA STATUS. It returns ok=false when the server is not a replica (i.e. it
+// is itself a primary or a standalone server), which is signaled by an empty result set.
+func (c *Client) ReplicationMasterEndpoint(ctx context.Context) (host string, port int32, ok bool, err error) {
+	rows, err := c.QueryColumnMaps(ctx, "SHOW REPLICA STATUS")
+	if err != nil {
+		return "", 0, false, err
+	}
+	if len(rows) == 0 {
+		return "", 0, false, nil
+	}
+	masterHost := rows[0]["Master_Host"]
+	if masterHost == "" {
+		return "", 0, false, nil
+	}
+	masterPort, err := strconv.Atoi(rows[0]["Master_Port"])
+	if err != nil {
+		return "", 0, false, fmt.Errorf("error parsing Master_Port %q: %v", rows[0]["Master_Port"], err)
+	}
+	return masterHost, int32(masterPort), true, nil
+}
+
+// InUseServerIds returns the server ids in use in the topology as seen from this server: its own
+// server_id plus the server_id of every replica registered against it (SHOW SLAVE HOSTS). It must be
+// run against the primary to observe the full set of replicas.
+func (c *Client) InUseServerIds(ctx context.Context) ([]int, error) {
+	ids := make([]int, 0)
+
+	ownServerID, err := c.SystemVariable(ctx, "server_id")
+	if err != nil {
+		return nil, fmt.Errorf("error getting server_id: %v", err)
+	}
+	if id, err := strconv.Atoi(ownServerID); err == nil {
+		ids = append(ids, id)
+	}
+
+	rows, err := c.QueryColumnMaps(ctx, "SHOW SLAVE HOSTS")
+	if err != nil {
+		return nil, fmt.Errorf("error listing slave hosts: %v", err)
+	}
+	for _, row := range rows {
+		id, err := strconv.Atoi(row["Server_id"])
+		if err != nil {
+			continue
+		}
+		if !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
 func (c *Client) SetSqlSlaveSkipCounter(ctx context.Context, count int) error {
 	return c.Exec(ctx, fmt.Sprintf("SET GLOBAL sql_slave_skip_counter = %d;", count))
 }
@@ -1180,6 +1243,8 @@ MASTER_SSL_CERT='{{ .SSLCertPath }}',
 MASTER_SSL_KEY='{{ .SSLKeyPath }}',
 MASTER_SSL_CA='{{ .SSLCAPath }}',
 MASTER_SSL_VERIFY_SERVER_CERT=1,
+{{- else }}
+MASTER_SSL_VERIFY_SERVER_CERT=0,
 {{- end }}
 MASTER_HOST='{{ .Host }}',
 MASTER_PORT={{ .Port }},

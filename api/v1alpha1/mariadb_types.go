@@ -907,6 +907,10 @@ type MariaDBStatus struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=status
 	RootPasswordHash *string `json:"rootPasswordHash,omitempty"`
+	// ExternalReplication is the status of external replication.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=status
+	ExternalReplication *ExternalReplicationStatus `json:"externalReplication,omitempty"`
 }
 
 // SetCondition sets a status condition to MariaDB

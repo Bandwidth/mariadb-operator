@@ -2,21 +2,27 @@ package controller
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
+	"time"
 
 	mariadbv1alpha1 "github.com/mariadb-operator/mariadb-operator/v26/api/v1alpha1"
+	"github.com/mariadb-operator/mariadb-operator/v26/pkg/builder"
 	"github.com/mariadb-operator/mariadb-operator/v26/pkg/refresolver"
 	sqlClient "github.com/mariadb-operator/mariadb-operator/v26/pkg/sql"
 	"github.com/mariadb-operator/mariadb-operator/v26/pkg/statefulset"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("MariaDB replication from external server", Ordered, func() {
@@ -361,9 +367,11 @@ var _ = Describe("MariaDB replication from external server", Ordered, func() {
 			client.Exec(testCtx, "USE test;"),
 			client.Exec(testCtx, "CREATE TABLE IF NOT EXISTS t (id INT PRIMARY KEY);"),
 			client.Exec(testCtx, "INSERT INTO t VALUES (1);"),
+			client.Exec(testCtx, "USE inttest;"),
+			client.Exec(testCtx, "INSERT INTO t VALUES (1);"),
 		).To(Succeed())
-
-		testDeletePod(mdb, 2, true)
+		podIndex := 1
+		testDeletePod(mdb, podIndex, true)
 
 		// Expect to get in recovering state eventually
 		By("Expecting MariaDB to be in recovering state eventually")
@@ -838,3 +846,369 @@ var _ = Describe("MariaDB replication from external server", Ordered, func() {
 	})
 
 })
+
+var _ = Describe("MariaDB replication from external server with server_id offset auto-discovery", Ordered, func() {
+	var (
+		// Two ExternalMariaDBs referencing the same HA testEmulateExternalMdb: one at its primary
+		// service (master endpoint) and one at its secondary service (slave endpoint). Both reuse the
+		// emulated-external credentials/TLS, so the operator can follow the secondary endpoint to the
+		// primary with the same connection settings.
+		emdbMasterKey = types.NamespacedName{Name: "emdb-autodisc-master", Namespace: testNamespace}
+		emdbSlaveKey  = types.NamespacedName{Name: "emdb-autodisc-slave", Namespace: testNamespace}
+
+		// mdbFromMaster replicates from the primary endpoint and is fully bootstrapped, so its replica
+		// server_ids register on the external primary. mdbFromSlave then replicates from the secondary
+		// endpoint and must discover a higher, non-colliding offset by following to the same primary.
+		mdbFromMasterKey = types.NamespacedName{Name: "mdb-autodisc-master", Namespace: testNamespace}
+		mdbFromSlaveKey  = types.NamespacedName{Name: "mdb-autodisc-slave", Namespace: testNamespace}
+
+		pbFromMasterKey = types.NamespacedName{Name: mdbFromMasterKey.Name + "-backup-template", Namespace: testNamespace}
+		pbFromSlaveKey  = types.NamespacedName{Name: mdbFromSlaveKey.Name + "-backup-template", Namespace: testNamespace}
+
+		externalPrimaryHost   = fmt.Sprintf("%s-primary.%s.svc.cluster.local", testEmulateExternalMdbkey.Name, testNamespace)
+		externalSecondaryHost = fmt.Sprintf("%s-secondary.%s.svc.cluster.local", testEmulateExternalMdbkey.Name, testNamespace)
+
+		// server_ids already in use on testEmulateExternalMdb (its own nodes), captured before any of
+		// the clusters under test connect. The discovered offsets must not collide with these.
+		externalServerIds []int
+		masterOffset      int
+	)
+
+	BeforeAll(func() {
+		By("Capturing the server_ids already in use on the external primary")
+		var extMdb mariadbv1alpha1.MariaDB
+		Expect(k8sClient.Get(testCtx, testEmulateExternalMdbkey, &extMdb)).To(Succeed())
+		extClient, err := sqlClient.NewClientWithMariaDB(testCtx, &extMdb, testRefResolver)
+		Expect(err).To(Succeed())
+		defer extClient.Close()
+		externalServerIds, err = extClient.InUseServerIds(testCtx)
+		Expect(err).To(Succeed())
+		Expect(externalServerIds).NotTo(BeEmpty())
+
+		By("Creating the ExternalMariaDB pointing at the external primary service (master endpoint)")
+		Expect(k8sClient.Create(testCtx, buildAutodiscExternalMariaDB(emdbMasterKey, externalPrimaryHost))).To(Succeed())
+		expectExternalMariadbReady(testCtx, k8sClient, emdbMasterKey)
+
+		By("Creating the physical backup template and the master-endpoint cluster (serverIdOffset unset)")
+		Expect(k8sClient.Create(testCtx, buildAutodiscBackupTemplate(pbFromMasterKey, mdbFromMasterKey))).To(Succeed())
+		Expect(k8sClient.Create(testCtx, buildAutodiscReplica(mdbFromMasterKey, emdbMasterKey, pbFromMasterKey))).To(Succeed())
+
+		DeferCleanup(func() {
+			deleteMariadb(mdbFromMasterKey, false)
+			deleteMariadb(mdbFromSlaveKey, false)
+			deleteExternalMariadbIfExists(emdbMasterKey)
+			deleteExternalMariadbIfExists(emdbSlaveKey)
+			deletePhysicalBackupIfExists(pbFromMasterKey)
+			deletePhysicalBackupIfExists(pbFromSlaveKey)
+		})
+	})
+
+	It("should auto-discover the offset from a master endpoint", func() {
+		By("Expecting the discovered offset to be persisted to status")
+		var mdb mariadbv1alpha1.MariaDB
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(testCtx, mdbFromMasterKey, &mdb)).To(Succeed())
+			g.Expect(mdb.Status.ExternalReplication).NotTo(BeNil())
+			g.Expect(mdb.Status.ExternalReplication.ServerIdOffset).NotTo(BeNil())
+		}, testHighTimeout, testInterval).Should(Succeed())
+		masterOffset = *mdb.Status.ExternalReplication.ServerIdOffset
+
+		By("Expecting the offset to be the highest external server_id plus the gap")
+		Expect(masterOffset >= slices.Max(externalServerIds)+externalReplServerIdGap).To(
+			BeTrue(),
+			"discovered offset %d should be higher than the highest external server_id %d plus the gap %d",
+			masterOffset,
+			slices.Max(externalServerIds),
+			externalReplServerIdGap,
+		)
+
+		By("Expecting the spec serverIdOffset to remain unset (discovery lives in status)")
+		Expect(mdb.Replication().ReplicaFromExternal.ServerIdOffset).To(BeNil())
+		Expect(ptr.Deref(mdb.ExternalReplServerIdOffset(), 0)).To(Equal(masterOffset))
+
+		By("Expecting the StatefulSet to carry the discovered offset as the server_id offset env var")
+		Eventually(func(g Gomega) {
+			var sts appsv1.StatefulSet
+			g.Expect(k8sClient.Get(testCtx, mdbFromMasterKey, &sts)).To(Succeed())
+			value, ok := autodiscContainerEnv(&sts, builder.MariadbContainerName, "MARIADB_EXTERNAL_REPL_SERVER_ID_OFFSET")
+			g.Expect(ok).To(BeTrue())
+			g.Expect(value).To(Equal(strconv.Itoa(masterOffset)))
+		}, testHighTimeout, testInterval).Should(Succeed())
+	})
+
+	It("should apply the discovered offset to the replica server_ids", func() {
+		By("Expecting the master-endpoint cluster to be ready eventually")
+		var mdb mariadbv1alpha1.MariaDB
+		Eventually(func() bool {
+			if err := k8sClient.Get(testCtx, mdbFromMasterKey, &mdb); err != nil {
+				return false
+			}
+			return mdb.IsReady()
+		}, testVeryHighTimeout, testInterval).Should(BeTrue())
+
+		By("Expecting server_id to equal podIndex + discovered offset on every replica")
+		for i := 0; i < int(mdb.Spec.Replicas); i++ {
+			podClient, err := sqlClient.NewInternalClientWithPodIndex(testCtx, &mdb, testRefResolver, i)
+			Expect(err).To(Succeed())
+			defer podClient.Close()
+
+			serverID, err := podClient.SystemVariable(testCtx, "server_id")
+			Expect(err).To(Succeed())
+			serverIDInt, err := strconv.Atoi(serverID)
+			Expect(err).To(Succeed())
+			Expect(serverIDInt).To(Equal(i + masterOffset))
+		}
+	})
+
+	It("should discover a higher, non-colliding offset from a slave endpoint by following it to the primary", func() {
+		By("Waiting until the master-endpoint cluster's replica server_ids are registered on the external primary")
+		var extMdb mariadbv1alpha1.MariaDB
+		Expect(k8sClient.Get(testCtx, testEmulateExternalMdbkey, &extMdb)).To(Succeed())
+		primaryClient, err := sqlClient.NewClientWithMariaDB(testCtx, &extMdb, testRefResolver)
+		Expect(err).To(Succeed())
+		defer primaryClient.Close()
+
+		masterCluster := &mariadbv1alpha1.MariaDB{}
+		Expect(k8sClient.Get(testCtx, mdbFromMasterKey, masterCluster)).To(Succeed())
+		masterIds := make([]int, 0, masterCluster.Spec.Replicas)
+		for i := 0; i < int(masterCluster.Spec.Replicas); i++ {
+			masterIds = append(masterIds, i+masterOffset)
+		}
+		Eventually(func(g Gomega) {
+			ids, err := primaryClient.InUseServerIds(testCtx)
+			g.Expect(err).To(Succeed())
+			g.Expect(ids).To(ContainElements(masterIds))
+		}, testVeryHighTimeout, testInterval).Should(Succeed())
+
+		By("Capturing the server_ids in use on the external primary before creating the slave-endpoint cluster")
+		primaryIds, err := primaryClient.InUseServerIds(testCtx)
+		Expect(err).To(Succeed())
+		expectedSlaveOffset := slices.Max(primaryIds) + externalReplServerIdGap
+
+		By("Creating the ExternalMariaDB pointing at the external secondary service (slave endpoint)")
+		Expect(k8sClient.Create(testCtx, buildAutodiscExternalMariaDB(emdbSlaveKey, externalSecondaryHost))).To(Succeed())
+		expectExternalMariadbReady(testCtx, k8sClient, emdbSlaveKey)
+
+		By("Creating the physical backup template and the slave-endpoint cluster (serverIdOffset unset)")
+		Expect(k8sClient.Create(testCtx, buildAutodiscBackupTemplate(pbFromSlaveKey, mdbFromSlaveKey))).To(Succeed())
+		Expect(k8sClient.Create(testCtx, buildAutodiscReplica(mdbFromSlaveKey, emdbSlaveKey, pbFromSlaveKey))).To(Succeed())
+
+		By("Expecting the slave-endpoint cluster to discover the offset derived from the primary")
+		var mdb mariadbv1alpha1.MariaDB
+		Eventually(func(g Gomega) {
+			g.Expect(k8sClient.Get(testCtx, mdbFromSlaveKey, &mdb)).To(Succeed())
+			g.Expect(mdb.Status.ExternalReplication).NotTo(BeNil())
+			g.Expect(mdb.Status.ExternalReplication.ServerIdOffset).NotTo(BeNil())
+		}, testHighTimeout, testInterval).Should(Succeed())
+		slaveOffset := *mdb.Status.ExternalReplication.ServerIdOffset
+		Expect(slaveOffset).To(Equal(expectedSlaveOffset))
+
+		By("Expecting the slave-endpoint offset to be higher than the master-endpoint one")
+		Expect(slaveOffset).To(BeNumerically(">", masterOffset))
+
+		By("Expecting the server_ids of both clusters not to collide with each other nor with the external servers")
+		slaveIds := make([]int, 0, mdb.Spec.Replicas)
+		for i := 0; i < int(mdb.Spec.Replicas); i++ {
+			slaveIds = append(slaveIds, i+slaveOffset)
+		}
+		Expect(autodiscDisjoint(masterIds, slaveIds)).To(BeTrue(), "master and slave server_ids must not collide")
+		Expect(autodiscDisjoint(masterIds, externalServerIds)).To(BeTrue(), "master server_ids must not collide with the external servers")
+		Expect(autodiscDisjoint(slaveIds, externalServerIds)).To(BeTrue(), "slave server_ids must not collide with the external servers")
+
+		By("Expecting the StatefulSet to carry the discovered offset as the server_id offset env var")
+		Eventually(func(g Gomega) {
+			var sts appsv1.StatefulSet
+			g.Expect(k8sClient.Get(testCtx, mdbFromSlaveKey, &sts)).To(Succeed())
+			value, ok := autodiscContainerEnv(&sts, builder.MariadbContainerName, "MARIADB_EXTERNAL_REPL_SERVER_ID_OFFSET")
+			g.Expect(ok).To(BeTrue())
+			g.Expect(value).To(Equal(strconv.Itoa(slaveOffset)))
+		}, testHighTimeout, testInterval).Should(Succeed())
+	})
+})
+
+// buildAutodiscExternalMariaDB builds an ExternalMariaDB pointing at host, reusing the emulated
+// external credentials and TLS material. Both endpoints belong to the same testEmulateExternalMdb
+// cluster (one CA), so the operator can follow the secondary endpoint to the primary with the same
+// TLS settings.
+func buildAutodiscExternalMariaDB(key types.NamespacedName, host string) *mariadbv1alpha1.ExternalMariaDB {
+	return &mariadbv1alpha1.ExternalMariaDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      key.Name,
+			Namespace: key.Namespace,
+		},
+		Spec: mariadbv1alpha1.ExternalMariaDBSpec{
+			Host:     host,
+			Username: ptr.To("root"),
+			PasswordSecretKeyRef: &mariadbv1alpha1.SecretKeySelector{
+				LocalObjectReference: mariadbv1alpha1.LocalObjectReference{
+					Name: testEmulatedExternalPwdKey.Name,
+				},
+				Key: testPwdSecretKey,
+			},
+			TLS: &mariadbv1alpha1.ExternalTLS{
+				TLS: mariadbv1alpha1.TLS{
+					Enabled:  true,
+					Required: ptr.To(false),
+					ServerCASecretRef: &mariadbv1alpha1.LocalObjectReference{
+						Name: "mdb-emulate-external-test-ca",
+					},
+					ClientCertSecretRef: &mariadbv1alpha1.LocalObjectReference{
+						Name: "mdb-emulate-external-test-client-cert",
+					},
+					ServerCertSecretRef: &mariadbv1alpha1.LocalObjectReference{
+						Name: "mdb-emulate-external-test-server-cert",
+					},
+				},
+			},
+		},
+	}
+}
+
+// buildAutodiscBackupTemplate builds the physical backup template that a cluster under test bootstraps
+// from. External replication requires a bootstrap source; the offset is discovered in the status phase
+// well before the bootstrap runs.
+func buildAutodiscBackupTemplate(key, mdbKey types.NamespacedName) *mariadbv1alpha1.PhysicalBackup {
+	return &mariadbv1alpha1.PhysicalBackup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      key.Name,
+			Namespace: key.Namespace,
+		},
+		Spec: mariadbv1alpha1.PhysicalBackupSpec{
+			MariaDBRef: mariadbv1alpha1.MariaDBRef{
+				ObjectReference: mariadbv1alpha1.ObjectReference{
+					Name: mdbKey.Name,
+				},
+				Kind:      mariadbv1alpha1.ExternalMariaDBKind,
+				WaitForIt: false,
+			},
+			Target:      ptr.To(mariadbv1alpha1.PhysicalBackupTargetPreferReplica),
+			Schedule:    &mariadbv1alpha1.PhysicalBackupSchedule{Suspend: true},
+			Compression: mariadbv1alpha1.CompressBzip2,
+			Storage: mariadbv1alpha1.PhysicalBackupStorage{
+				PersistentVolumeClaim: &mariadbv1alpha1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
+					},
+					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				},
+			},
+			Timeout:     &metav1.Duration{Duration: 1 * time.Hour},
+			PodAffinity: ptr.To(true),
+			JobContainerTemplate: mariadbv1alpha1.JobContainerTemplate{
+				Resources: &mariadbv1alpha1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    resource.MustParse("300m"),
+						corev1.ResourceMemory: resource.MustParse("512Mi"),
+					},
+				},
+			},
+		},
+	}
+}
+
+// buildAutodiscReplica builds a MariaDB that replicates from the given external endpoint with
+// serverIdOffset intentionally unset, so the operator must auto-discover it.
+func buildAutodiscReplica(key, emdbKey, pbKey types.NamespacedName) *mariadbv1alpha1.MariaDB {
+	mdb := &mariadbv1alpha1.MariaDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      key.Name,
+			Namespace: key.Namespace,
+		},
+		Spec: mariadbv1alpha1.MariaDBSpec{
+			Username: &testUser,
+			PasswordSecretKeyRef: &mariadbv1alpha1.GeneratedSecretKeyRef{
+				SecretKeySelector: mariadbv1alpha1.SecretKeySelector{
+					LocalObjectReference: mariadbv1alpha1.LocalObjectReference{
+						Name: testPwdKey.Name,
+					},
+					Key: testPwdSecretKey,
+				},
+			},
+			Database: &testDatabase,
+			MyCnf: ptr.To(`[mariadb]
+bind-address=*
+default_storage_engine=InnoDB
+binlog_format=row
+innodb_autoinc_lock_mode=2
+max_allowed_packet=256M`),
+			Replication: &mariadbv1alpha1.Replication{
+				ReplicationSpec: mariadbv1alpha1.ReplicationSpec{
+					ReplicaFromExternal: &mariadbv1alpha1.ReplicaFromExternal{
+						MariaDBRef: mariadbv1alpha1.MariaDBRef{
+							ObjectReference: mariadbv1alpha1.ObjectReference{
+								Name: emdbKey.Name,
+							},
+							Kind: mariadbv1alpha1.ExternalMariaDBKind,
+						},
+						// ServerIdOffset intentionally left unset to exercise auto-discovery.
+					},
+					Replica: mariadbv1alpha1.ReplicaReplication{
+						ReplicaBootstrapFrom: &mariadbv1alpha1.ReplicaBootstrapFrom{
+							PhysicalBackupTemplateRef: mariadbv1alpha1.LocalObjectReference{
+								Name: pbKey.Name,
+							},
+						},
+						IgnoreMaxLagSeconds:             ptr.To(true),
+						IgnoreReplicationLivenessProbes: ptr.To(true),
+					},
+				},
+				Enabled: true,
+			},
+			Replicas: 2,
+			Storage: mariadbv1alpha1.Storage{
+				Size:             ptr.To(resource.MustParse("300Mi")),
+				StorageClassName: "standard-resize",
+			},
+			TLS: &mariadbv1alpha1.TLS{
+				Enabled:  true,
+				Required: ptr.To(true),
+			},
+		},
+	}
+	return applyMariadbTestConfig(mdb)
+}
+
+// autodiscContainerEnv returns the value of the named env var on the named container of the StatefulSet.
+func autodiscContainerEnv(sts *appsv1.StatefulSet, containerName, envName string) (string, bool) {
+	for _, c := range sts.Spec.Template.Spec.Containers {
+		if c.Name != containerName {
+			continue
+		}
+		for _, e := range c.Env {
+			if e.Name == envName {
+				return e.Value, true
+			}
+		}
+	}
+	return "", false
+}
+
+// autodiscDisjoint reports whether the two server_id sets have no element in common.
+func autodiscDisjoint(a, b []int) bool {
+	for _, id := range a {
+		if slices.Contains(b, id) {
+			return false
+		}
+	}
+	return true
+}
+
+// deleteExternalMariadbIfExists deletes an ExternalMariaDB, ignoring a not-found error.
+func deleteExternalMariadbIfExists(key types.NamespacedName) {
+	var emdb mariadbv1alpha1.ExternalMariaDB
+	if err := k8sClient.Get(testCtx, key, &emdb); err == nil {
+		Expect(k8sClient.Delete(testCtx, &emdb)).To(Succeed())
+	}
+}
+
+// deletePhysicalBackupIfExists deletes a PhysicalBackup, ignoring a not-found error.
+func deletePhysicalBackupIfExists(key types.NamespacedName) {
+	var pb mariadbv1alpha1.PhysicalBackup
+	if err := k8sClient.Get(testCtx, key, &pb); err == nil {
+		Expect(k8sClient.Delete(testCtx, &pb)).To(Succeed())
+	}
+}

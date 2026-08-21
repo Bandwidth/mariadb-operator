@@ -13,6 +13,7 @@
   - [Errors that trigger a recovery](#errors-that-trigger-a-recovery)
   - [How recovery works](#how-recovery-works)
   - [Timeouts](#timeouts)
+- [Automatic serverId offset](#automatic-serverid-offset)
 - [Backup validity and retention](#backup-validity-and-retention)
 - [Filtered replication](#filtered-replication)
   - [How the filtered backup is taken](#how-the-filtered-backup-is-taken)
@@ -82,12 +83,26 @@ The `replicaFromExternal` field supports the following options:
 | Field | Description | Default |
 | ----- | ----------- | ------- |
 | `mariaDbRef` | Reference to the `ExternalMariaDB` object that acts as the replication source. Immutable. | - |
-| `serverIdOffset` | `serverId` offset value used on the replicas, to avoid conflicting with other replicas or with the source server. | `0` |
+| `serverIdOffset` | `serverId` offset used on the replicas (each replica gets `server_id = podIndex + offset`), to avoid conflicting with other replicas or with the source server. When unset, the operator auto-discovers a non-colliding offset (see [Automatic serverId offset](#automatic-serverid-offset)). | auto-discovered |
 | `gtid` | Global Transaction ID position mode used when connecting a replica to the source (`CurrentPos` or `SlavePos`). | `CurrentPos` |
 | `connectionTimeout` | Timeout used when the replica connects to the source. | - |
 | `connectionRetries` | Number of connection retries when the replica connects to the source. | - |
 | `healthCheckInterval` | Interval used to health-check the connection to the source. | `15s` |
 | `filteredReplicaTables` | Optional list of `database.table` entries to replicate. See [Filtered replication](#filtered-replication). | - |
+
+## Automatic serverId offset
+
+Every replica needs a `server_id` that is unique across everything connected to the source: its own replicas, the source itself, and any other cluster replicating from the same source. Each replica Pod is assigned `server_id = podIndex + offset`.
+
+When `serverIdOffset` is **not set**, the operator discovers a non-colliding offset automatically:
+
+1. It queries the source for the `server_id`s already in use — the source's own `server_id` plus the `server_id` of every replica currently registered against it (`SHOW SLAVE HOSTS`). If a `binlogPort` is configured on the `ExternalMariaDB`, the query is issued against that port, so the MaxScale Binlogrouter reports the replicas registered across **all** clusters, not just this one.
+2. It picks `offset = max(in-use serverId) + 100`, leaving room above the highest existing `server_id` for this cluster to scale out and for other clusters to claim their own blocks.
+3. The result is persisted to `status.externalReplication.serverIdOffset` and **computed only once** — it is never re-queried, so it stays stable and does not cause Pod restarts.
+
+The discovery runs before the `StatefulSet` is created; while the source is not reachable the reconciliation waits (external replication is not possible until the source is reachable anyway), so Pods are always created with the final `server_id`.
+
+Setting `serverIdOffset` explicitly disables the discovery and uses the provided value verbatim (`status.externalReplication` is left unset). This keeps existing clusters unaffected.
 
 ## Bootstrapping and recovery sources
 

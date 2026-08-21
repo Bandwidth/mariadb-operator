@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: mdb-emulate-external-test-0-lb
+  name: mdb-autodisc-master-0-lb
   namespace: default
   annotations:
-    metallb.io/loadBalancerIPs: $CIDR_PREFIX.0.48
+    metallb.io/loadBalancerIPs: $CIDR_PREFIX.0.207
 spec:
   ports:
   - name: mariadb
@@ -21,19 +21,19 @@ spec:
     protocol: TCP
     targetPort: 5566
   selector:
-    app.kubernetes.io/instance: mdb-emulate-external-test
+    app.kubernetes.io/instance: mdb-autodisc-master
     app.kubernetes.io/name: mariadb
-    statefulset.kubernetes.io/pod-name: mdb-emulate-external-test-0
+    statefulset.kubernetes.io/pod-name: mdb-autodisc-master-0
   publishNotReadyAddresses: true
   type: LoadBalancer
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: mdb-emulate-external-test-1-lb
+  name: mdb-autodisc-master-1-lb
   namespace: default
   annotations:
-    metallb.io/loadBalancerIPs: $CIDR_PREFIX.0.204
+    metallb.io/loadBalancerIPs: $CIDR_PREFIX.0.208
 spec:
   ports:
   - name: mariadb
@@ -49,8 +49,8 @@ spec:
     protocol: TCP
     targetPort: 5566
   selector:
-    app.kubernetes.io/instance: mdb-emulate-external-test
+    app.kubernetes.io/instance: mdb-autodisc-master
     app.kubernetes.io/name: mariadb
-    statefulset.kubernetes.io/pod-name: mdb-emulate-external-test-1
+    statefulset.kubernetes.io/pod-name: mdb-autodisc-master-1
   publishNotReadyAddresses: true
   type: LoadBalancer
