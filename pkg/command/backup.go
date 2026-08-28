@@ -34,6 +34,7 @@ type BackupOpts struct {
 	TargetTime             time.Time
 	TargetTimeAgeThreshold *time.Time
 	Compression            mariadbv1alpha1.CompressAlgorithm
+	CompressionThreads     *int32
 	LogLevel               string
 	ExtraOpts              []string
 
@@ -115,6 +116,12 @@ func WithCompression(c mariadbv1alpha1.CompressAlgorithm) BackupOpt {
 func WithBackupTargetTimeAgeThreshold(threshold *time.Time) BackupOpt {
 	return func(bo *BackupOpts) {
 		bo.TargetTimeAgeThreshold = threshold
+	}
+}
+
+func WithCompressionThreads(t *int32) BackupOpt {
+	return func(bo *BackupOpts) {
+		bo.CompressionThreads = t
 	}
 }
 
@@ -370,6 +377,12 @@ func (b *BackupCommand) MariadbOperatorBackup() (*Command, error) {
 			string(b.Compression),
 		}...)
 	}
+	if b.CompressionThreads != nil {
+		args = append(args, []string{
+			"--compression-threads",
+			fmt.Sprintf("%d", *b.CompressionThreads),
+		}...)
+	}
 	if b.LogLevel != "" {
 		args = append(args, []string{
 			"--log-level",
@@ -552,6 +565,12 @@ func (b *BackupCommand) MariadbOperatorPITR(strictMode bool) (*Command, error) {
 		args = append(args, []string{
 			"--compression",
 			string(b.Compression),
+		}...)
+	}
+	if b.CompressionThreads != nil {
+		args = append(args, []string{
+			"--compression-threads",
+			fmt.Sprintf("%d", *b.CompressionThreads),
 		}...)
 	}
 	if b.LogLevel != "" {
