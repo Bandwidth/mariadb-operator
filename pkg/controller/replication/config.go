@@ -66,6 +66,10 @@ func NewReplicationConfig(env *env.PodEnvironment) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error getting semi-sync master wait no slave: %v", err)
 	}
+	serverIDStartIndex, err := serverIDStartIndex(env.MariaDBReplServerIDStartIndex)
+	if err != nil {
+		return nil, fmt.Errorf("error getting semi-sync master wait no slave: %v", err)
+	}
 	externalReplEnabled, err := env.IsExternalReplEnabled()
 	if err != nil {
 		return nil, fmt.Errorf("error checking if external replication is enabled: %v", err)
