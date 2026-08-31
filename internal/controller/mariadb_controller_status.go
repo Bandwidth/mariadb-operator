@@ -217,14 +217,11 @@ func (r *MariaDBReconciler) getReplicationRoles(ctx context.Context,
 	mdb *mariadbv1alpha1.MariaDB) (map[string]mariadbv1alpha1.ReplicationRole, error) {
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("Getting Replication Roles")
-	if !mdb.IsReplicationEnabled() {
+	if !mdb.IsReplicationEnabled() && (mdb.Spec.MultiCluster == nil || !mdb.Spec.MultiCluster.Enabled) {
 		return nil, nil
 	}
 
-	clientSet, err := replication.NewReplicationClientSet(mdb, r.RefResolver)
-	if err != nil {
-		return nil, fmt.Errorf("error creating mariadb clientset: %v", err)
-	}
+	clientSet := sql.NewClientSet(mdb, r.RefResolver)
 	defer clientSet.Close()
 
 	var replState map[string]mariadbv1alpha1.ReplicationRole

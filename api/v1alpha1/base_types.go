@@ -915,8 +915,11 @@ type Schedule struct {
 }
 
 func (s *Schedule) Validate() error {
-	_, err := CronParser.Parse(s.Cron)
-	return err
+	if s.Cron != "" {
+		_, err := CronParser.Parse(s.Cron)
+		return err
+	}
+	return nil
 }
 
 // CronJobTemplate defines parameters for configuring CronJob objects.

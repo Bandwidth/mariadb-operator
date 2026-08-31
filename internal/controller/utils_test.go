@@ -1652,6 +1652,26 @@ func deleteMariadb(key types.NamespacedName, assertPVCDeletion bool) {
 		return apierrors.IsNotFound(err)
 	}, testTimeout, testInterval).Should(BeTrue())
 
+	// The MariaDB object being gone does not mean its Pods are: they are garbage collected
+	// asynchronously and MariaDB shuts down gracefully. Leftover Pods still serve SQL and still have
+	// replication configured, so a test that immediately re-creates a MariaDB with the same name may
+	// observe them and trigger an automatic failover on the brand new object. Waiting here also lets
+	// the pvc-protection finalizer release the PVCs deleted below.
+	By("Expecting MariaDB Pods to be deleted")
+	Eventually(func(g Gomega) bool {
+		var podList corev1.PodList
+		listOpts := []client.ListOption{
+			client.MatchingLabels(
+				labels.NewLabelsBuilder().
+					WithMariaDBSelectorLabels(&mdb).
+					Build(),
+			),
+			client.InNamespace(mdb.Namespace),
+		}
+		g.Expect(k8sClient.List(testCtx, &podList, listOpts...)).To(Succeed())
+		return len(podList.Items) == 0
+	}, testTimeout, testInterval).Should(BeTrue())
+
 	By("Deleting PVCs")
 	opts := []client.DeleteAllOfOption{
 		client.MatchingLabels(
