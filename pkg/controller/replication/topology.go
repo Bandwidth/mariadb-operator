@@ -238,6 +238,20 @@ func (r *singleClusterTopology) changeMaster(ctx context.Context, mariadb *maria
 		changeMasterOpts = append(changeMasterOpts, sql.WithChangeMasterRetries(*replication.Replica.ConnectionRetrySeconds))
 	}
 
+	// A node that retained self-originated GTIDs from a previous primary term (a
+	// non-empty gtid_binlog_pos) is being demoted to a replica, not freshly
+	// configured. MASTER_USE_GTID cannot reconcile those self-owned GTIDs, so
+	// emit MASTER_DEMOTE_TO_SLAVE=1 instead, which merges gtid_binlog_pos into
+	// gtid_slave_pos (the non-destructive replacement for the RESET MASTER that
+	// used to run here).
+	gtidBinlogPos, err := client.GtidBinlogPos(ctx)
+	if err != nil {
+		return fmt.Errorf("error getting gtid_binlog_pos: %v", err)
+	}
+	if gtidBinlogPos != "" {
+		changeMasterOpts = append(changeMasterOpts, sql.WithChangeMasterDemote(true))
+	}
+
 	changeMasterOpts = append(changeMasterOpts, opts...)
 
 	if err := client.ChangeMaster(ctx, changeMasterOpts...); err != nil {
