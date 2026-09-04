@@ -1,0 +1,11 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  schemaVersion: v1.0.0
+  name: mariadb-operator-location
+  description: Links to additional entities in the mariadb-operator repository.
+  annotations:
+    github.com/project-slug: Bandwidth/mariadb-operator
+spec:
+  targets:
+    - ./component.yaml
