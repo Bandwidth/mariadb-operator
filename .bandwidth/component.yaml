@@ -1,0 +1,21 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  schemaVersion: v1.0.0
+  name: mariadb-operator
+  description: Forked from https://github.com/mariadb-operator/mariadb-operator
+  annotations:
+    github.com/project-slug: Bandwidth/mariadb-operator
+    bandwidth.com/environment: production
+  organization: BW
+  costCenter: undefined
+  platformType:
+    - OCP4
+  buildPlatform: GitHub Actions
+spec:
+  type: Infrastructure as Code
+  owner: github/band-platform-operations
+  lifecycle: Prototype
+  dependsOn:
+    - resource:platform/GitHub Actions
+    - resource:cost-center/undefined
