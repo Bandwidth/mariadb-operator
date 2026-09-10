@@ -143,7 +143,7 @@ jobs:
         with:
           fetch-depth: 0
           token: "${{ secrets.GHA_TOKEN }}"
-          ref: "band/${{ needs.args.outputs.DEFAULT_BRANCH }}"
+          ref: "band/v${{ needs.args.outputs.DEFAULT_BRANCH }}"
 
       - name: Configure Git
         run: |
@@ -177,7 +177,7 @@ jobs:
         with:
           fetch-depth: 0
           token: "${{ secrets.GHA_TOKEN }}"
-          ref: "band/${{ needs.args.outputs.DEFAULT_BRANCH }}"
+          ref: "band/v${{ needs.args.outputs.DEFAULT_BRANCH }}"
 
       - name: Configure Git
         run: |
