@@ -37,16 +37,16 @@ jobs:
         env:
           GITHUB_TOKEN: "${{ secrets.GHA_TOKEN }}"
 
-  olm:
-    name: Helm OLM
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
+  # olm:
+  #   name: Helm OLM
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v6
+  #       with:
+  #         fetch-depth: 0
 
-      - name: Dispatch helm OLM workflow
-        run: gh workflow run bundle.yaml --repo mariadb-operator/mariadb-operator-helm -f version=$(make helm-version)
-        env:
-          GITHUB_TOKEN: "${{ secrets.GHA_TOKEN }}"
+  #     - name: Dispatch helm OLM workflow
+  #       run: gh workflow run bundle.yaml --repo mariadb-operator/mariadb-operator-helm -f version=$(make helm-version)
+  #       env:
+  #         GITHUB_TOKEN: "${{ secrets.GHA_TOKEN }}"

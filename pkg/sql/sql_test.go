@@ -42,6 +42,7 @@ func TestBuildChangeMasterQuery(t *testing.T) {
 				WithChangeMasterGtid("CurrentPos"),
 			},
 			wantQuery: `CHANGE MASTER  TO
+MASTER_SSL_VERIFY_SERVER_CERT=0,
 MASTER_HOST='127.0.0.1',
 MASTER_PORT=3306,
 MASTER_USER='repl',
@@ -94,6 +95,7 @@ MASTER_USE_GTID=CurrentPos;
 				WithChangeMasterRetries(10),
 			},
 			wantQuery: `CHANGE MASTER  TO
+MASTER_SSL_VERIFY_SERVER_CERT=0,
 MASTER_HOST='127.0.0.1',
 MASTER_PORT=3306,
 MASTER_USER='repl',
@@ -113,6 +115,7 @@ MASTER_USE_GTID=CurrentPos;
 				WithChangeMasterGtid("CurrentPos"),
 			},
 			wantQuery: `CHANGE MASTER 'replica' TO
+MASTER_SSL_VERIFY_SERVER_CERT=0,
 MASTER_HOST='127.0.0.1',
 MASTER_PORT=3306,
 MASTER_USER='repl',

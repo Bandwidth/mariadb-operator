@@ -802,6 +802,10 @@ type MariaDBSpec struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
 	Maintenance *MariaDBMaintenance `json:"maintenance,omitempty"`
+	// MultiCluster Connection name
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	MultiClusterReplicaConnectionName *string `json:"multiClusterReplicaConnectionName,omitempty"`
 }
 
 // MariaDBTLSStatus aggregates the status of the certificates used by the MariaDB instance.
@@ -903,6 +907,10 @@ type MariaDBStatus struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=status
 	RootPasswordHash *string `json:"rootPasswordHash,omitempty"`
+	// ExternalReplication is the status of external replication.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=status
+	ExternalReplication *ExternalReplicationStatus `json:"externalReplication,omitempty"`
 }
 
 // SetCondition sets a status condition to MariaDB
@@ -941,7 +949,7 @@ type MariaDB struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// +kubebuilder:validation:XValidation:rule="!has(self.galera) || !self.galera.enabled || (self.replicas % 2 == 1 || self.replicasAllowEvenNumber)", message="An odd number of MariaDB instances (mariadb.spec.replicas) is required to avoid split brain situations for Galera. Use 'mariadb.spec.replicasAllowEvenNumber: true' to disable this validation."
+	// +kubebuilder:validation:XValidation:rule="!has(self.galera) || !self.galera.enabled || (self.replicas % 2 == 1 || self.replicasAllowEvenNumber ) || ( has(self.replication) && has(self.replication.replicaFromExternal) )", message="An odd number of MariaDB instances (mariadb.spec.replicas) is required to avoid split brain situations for Galera. Use 'mariadb.spec.replicasAllowEvenNumber: true' to disable this validation."
 	Spec   MariaDBSpec   `json:"spec"`
 	Status MariaDBStatus `json:"status,omitempty"`
 }
@@ -1004,6 +1012,7 @@ func (m *MariaDB) SetDefaults(env *environment.OperatorEnv) error {
 			return fmt.Errorf("error setting replication defaults: %v", err)
 		}
 	}
+
 	if m.Spec.BootstrapFrom != nil {
 		m.Spec.BootstrapFrom.SetDefaults(m)
 	}
@@ -1016,6 +1025,14 @@ func (m *MariaDB) SetDefaults(env *environment.OperatorEnv) error {
 	m.Spec.SetDefaults(m.ObjectMeta)
 
 	return nil
+}
+
+func (m *MariaDB) Replication() Replication {
+	if m.Spec.Replication == nil {
+		m.Spec.Replication = &Replication{}
+	}
+	m.Spec.Replication.FillWithDefaults()
+	return *m.Spec.Replication
 }
 
 // IsGaleraEnabled indicates whether the MariaDB instance has Galera enabled
@@ -1325,13 +1342,27 @@ func (m *MariaDB) GetImage(env *environment.OperatorEnv) string {
 
 // Get MariaDB hostname
 func (m *MariaDB) GetHost() string {
-	if m.IsHAEnabled() {
+	if m.IsHAEnabled() && m.Replication().ReplicaFromExternal == nil {
 		return statefulset.ServiceFQDNWithService(
 			m.ObjectMeta,
 			m.PrimaryServiceKey().Name,
 		)
 	}
 	return statefulset.ServiceFQDN(m.ObjectMeta)
+}
+
+// Get specific MariaDB Pod hostname
+func (m *MariaDB) GetPodHost(podIndex int) string {
+	return statefulset.PodFQDNWithService(
+		m.ObjectMeta,
+		podIndex,
+		m.InternalServiceKey().Name,
+	)
+}
+
+// Get MariaDB Object Meta
+func (m *MariaDB) GetObjectMeta() *metav1.ObjectMeta {
+	return &m.ObjectMeta
 }
 
 // Get MariaDB port

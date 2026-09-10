@@ -24,6 +24,9 @@ host-mdb-test: ## Add MariaDB test hosts to /etc/hosts.
 host-mdb-emulated-external-test: ## Add MariaDB test hosts to /etc/hosts.
 	@./hack/add_host.sh 0 47 mdb-emulate-external-test.default.svc.cluster.local
 	@./hack/add_host.sh 0 48 mdb-emulate-external-test-0.mdb-emulate-external-test-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 204 mdb-emulate-external-test-1.mdb-emulate-external-test-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 205 mdb-emulate-external-test-primary.default.svc.cluster.local
+	@./hack/add_host.sh 0 206 mdb-emulate-external-test-secondary.default.svc.cluster.local
 
 .PHONY: host-mxs-test
 host-mxs-test: ## Add MaxScale test hosts to /etc/hosts.
@@ -40,9 +43,38 @@ host-mariadb-repl: ## Add mariadb repl hosts to /etc/hosts.
 	@./hack/add_host.sh 0 111 mariadb-repl-1.mariadb-repl-internal.default.svc.cluster.local
 	@./hack/add_host.sh 0 112 mariadb-repl-2.mariadb-repl-internal.default.svc.cluster.local
 	@./hack/add_host.sh 0 113 mariadb-repl-3.mariadb-repl-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 180 mariadb-repl-external-0.mariadb-repl-external-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 181 mariadb-repl-external-1.mariadb-repl-external-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 182 mariadb-repl-external-2.mariadb-repl-external-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 183 mariadb-repl-external-3.mariadb-repl-external-internal.default.svc.cluster.local
 	@./hack/add_host.sh 0 120 mariadb-repl.default.svc.cluster.local
 	@./hack/add_host.sh 0 130 mariadb-repl-primary.default.svc.cluster.local
 	@./hack/add_host.sh 0 131 mariadb-repl-secondary.default.svc.cluster.local
+
+.PHONY: host-mariadb-repl-ext-filtered
+host-mariadb-repl-ext-filtered: ## Add mariadb-repl-ext-filtered hosts to /etc/hosts.
+	@./hack/add_host.sh 0 184 mariadb-repl-ext-filtered-0.mariadb-repl-ext-filtered-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 185 mariadb-repl-ext-filtered-1.mariadb-repl-ext-filtered-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 186 mariadb-repl-ext-filtered-2.mariadb-repl-ext-filtered-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 187 mariadb-repl-ext-filtered-3.mariadb-repl-ext-filtered-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 188 mariadb-repl-ext-filtered.default.svc.cluster.local
+	@./hack/add_host.sh 0 189 mariadb-repl-ext-filtered-primary.default.svc.cluster.local
+	@./hack/add_host.sh 0 194 mariadb-repl-ext-filtered-secondary.default.svc.cluster.local
+
+.PHONY: host-mariadb-repl-ext-multi-schema
+host-mariadb-repl-ext-multi-schema: ## Add mariadb-repl-ext-multi-schema hosts to /etc/hosts.
+	@./hack/add_host.sh 0 195 mariadb-repl-ext-multi-schema.default.svc.cluster.local
+	@./hack/add_host.sh 0 196 mariadb-repl-ext-multi-schema-primary.default.svc.cluster.local
+	@./hack/add_host.sh 0 197 mariadb-repl-ext-multi-schema-secondary.default.svc.cluster.local
+	@./hack/add_host.sh 0 198 mariadb-repl-ext-multi-schema-0.mariadb-repl-ext-multi-schema-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 199 mariadb-repl-ext-multi-schema-1.mariadb-repl-ext-multi-schema-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 202 mariadb-repl-ext-multi-schema-2.mariadb-repl-ext-multi-schema-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 203 mariadb-repl-ext-multi-schema-3.mariadb-repl-ext-multi-schema-internal.default.svc.cluster.local
+
+.PHONY: host-mariadb-repl-ext-autodiscovery
+host-mariadb-repl-ext-autodiscovery: ## Add mariadb-repl-ext server_id offset auto-discovery hosts to /etc/hosts.
+	@./hack/add_host.sh 0 207 mdb-autodisc-master-0.mdb-autodisc-master-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 208 mdb-autodisc-master-1.mdb-autodisc-master-internal.default.svc.cluster.local
 
 .PHONY: host-mariadb-galera
 host-mariadb-galera: ## Add mariadb galera hosts to /etc/hosts.
@@ -129,7 +161,7 @@ host-multi-cluster-mxs: ## Add multi-cluster maxscale hosts to /etc/hosts.
 	@./hack/add_host.sh 1 27 maxscale-eu-central-1.maxscale-eu-central-internal.default.svc.cluster.local
 
 .PHONY: host
-host: host-mariadb host-mdb-test host-mdb-emulated-external-test host-mxs-test host-mariadb-repl host-mariadb-galera host-mariadb-galera-test host-monitoring host-minio host-maxscale-repl host-maxscale-galera host-maxscale-gui host-multi-cluster host-multi-cluster-mxs host-azurite ## Configure hosts for local development.
+host: host-mariadb host-mdb-test host-mdb-emulated-external-test host-mxs-test host-mariadb-repl host-mariadb-repl-ext-filtered host-mariadb-repl-ext-multi-schema host-mariadb-repl-ext-autodiscovery host-mariadb-galera host-mariadb-galera-test host-monitoring host-minio host-maxscale-repl host-maxscale-galera host-maxscale-gui host-multi-cluster host-multi-cluster-mxs host-azurite ## Configure hosts for local development.
 
 .PHONY: net
 net: install-metallb host ## Configure networking for local development.

@@ -2430,6 +2430,62 @@ var _ = Describe("MariaDB types", func() {
 			),
 		)
 	})
+
+	Context("When defaulting a ReplicaFromExternal object", func() {
+		It("should not default serverIdOffset (nil means auto-discover)", func() {
+			ext := &ReplicaFromExternal{}
+			ext.FillWithDefaults()
+			Expect(ext.ServerIdOffset).To(BeNil())
+			Expect(ext.HealthCheckInterval).NotTo(BeNil())
+		})
+
+		It("should preserve an explicit serverIdOffset", func() {
+			ext := &ReplicaFromExternal{
+				ServerIdOffset: ptr.To(30),
+			}
+			ext.FillWithDefaults()
+			Expect(ext.ServerIdOffset).To(Equal(ptr.To(30)))
+		})
+	})
+
+	Context("When resolving the external replication serverId offset", func() {
+		newExternalReplMariaDB := func(manual *int, status *int) *MariaDB {
+			mdb := &MariaDB{
+				Spec: MariaDBSpec{
+					Replication: &Replication{
+						Enabled: true,
+						ReplicationSpec: ReplicationSpec{
+							ReplicaFromExternal: &ReplicaFromExternal{
+								ServerIdOffset: manual,
+							},
+						},
+					},
+				},
+			}
+			if status != nil {
+				mdb.Status.ExternalReplication = &ExternalReplicationStatus{
+					ServerIdOffset: status,
+				}
+			}
+			return mdb
+		}
+
+		DescribeTable(
+			"Should resolve the effective offset",
+			func(mdb *MariaDB, expected *int) {
+				Expect(mdb.ExternalReplServerIdOffset()).To(Equal(expected))
+			},
+			Entry("replication not enabled", &MariaDB{}, nil),
+			Entry(
+				"replication enabled but not external",
+				&MariaDB{Spec: MariaDBSpec{Replication: &Replication{Enabled: true}}},
+				nil,
+			),
+			Entry("manual offset wins over status", newExternalReplMariaDB(ptr.To(30), ptr.To(150)), ptr.To(30)),
+			Entry("discovered status offset when no manual offset", newExternalReplMariaDB(nil, ptr.To(150)), ptr.To(150)),
+			Entry("nil when neither manual nor status offset", newExternalReplMariaDB(nil, nil), nil),
+		)
+	})
 })
 
 var _ = Describe("MariaDBVolume conversion", func() {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-multierror"
@@ -31,6 +33,14 @@ func (r *MariaDBReconciler) reconcileStatus(ctx context.Context, mdb *mariadbv1a
 	}
 	logger := log.FromContext(ctx).WithName("status").V(1)
 
+	logger.Info("Reconciling MariaDB Status", "MariaDB:", mdb.Name)
+
+	// Discover and persist the external replication server_id offset before the StatefulSet is built,
+	// so pods are created with a non-colliding server_id and never need a restart to adopt it.
+	if result, err := r.reconcileExternalReplServerId(ctx, mdb); !result.IsZero() || err != nil {
+		return result, err
+	}
+
 	var sts appsv1.StatefulSet
 	if err := r.Get(ctx, client.ObjectKeyFromObject(mdb), &sts); err != nil {
 		logger.Info("error getting StatefulSet", "err", err)
@@ -55,7 +65,15 @@ func (r *MariaDBReconciler) reconcileStatus(ctx context.Context, mdb *mariadbv1a
 		logger.Info("error getting TLS status", "err", err)
 	}
 
-	return ctrl.Result{}, r.patchStatus(ctx, mdb, func(status *mariadbv1alpha1.MariaDBStatus) error {
+	return ctrl.Result{}, r.patchStatus(ctx, mdb,
+		r.statusPatcher(ctx, mdb, &sts, replRoles, replStatus, tlsStatus, mxsPrimaryPodIndex, mxsErr))
+}
+
+// statusPatcher builds the patcher that reconciles the MariaDB status from the state gathered by reconcileStatus.
+func (r *MariaDBReconciler) statusPatcher(ctx context.Context, mdb *mariadbv1alpha1.MariaDB, sts *appsv1.StatefulSet,
+	replRoles map[string]mariadbv1alpha1.ReplicationRole, replStatus map[string]mariadbv1alpha1.ReplicaStatus,
+	tlsStatus *mariadbv1alpha1.MariaDBTLSStatus, mxsPrimaryPodIndex *int, mxsErr error) func(*mariadbv1alpha1.MariaDBStatus) error {
+	return func(status *mariadbv1alpha1.MariaDBStatus) error {
 		status.DefaultVersion = r.Environment.MariadbDefaultVersion
 		status.Replicas = sts.Status.ReadyReplicas
 		defaultPrimary(mdb)
@@ -93,9 +111,101 @@ func (r *MariaDBReconciler) reconcileStatus(ctx context.Context, mdb *mariadbv1a
 		if err := r.setUpdatedCondition(ctx, mdb); err != nil {
 			log.FromContext(ctx).V(1).Info("error setting MariaDB updated condition", "err", err)
 		}
-		condition.SetReadyWithMariaDB(&mdb.Status, &sts, mdb)
+		condition.SetReadyWithMariaDB(&mdb.Status, sts, mdb)
 		return nil
-	})
+	}
+}
+
+// externalReplServerIdGap is the room left between the highest server_id already in use on the
+// external MariaDB and the offset assigned to this cluster. It gives headroom for this cluster to
+// scale out and for other clusters replicating from the same source to claim their own blocks.
+const externalReplServerIdGap = 100
+
+// reconcileExternalReplServerId auto-discovers a non-colliding server_id offset for external
+// replication and persists it to status. It is computed only once: when a manual serverIdOffset is
+// set, or once the offset is already persisted, it is a no-op. While the external MariaDB is not
+// reachable it requeues, which short-circuits the reconcile loop and prevents the StatefulSet from
+// being created before the offset is known (avoiding a rolling restart).
+func (r *MariaDBReconciler) reconcileExternalReplServerId(ctx context.Context,
+	mdb *mariadbv1alpha1.MariaDB) (ctrl.Result, error) {
+	if !mdb.IsReplicationEnabled() {
+		return ctrl.Result{}, nil
+	}
+	replication := mdb.Replication()
+	if !replication.IsExternalReplication() {
+		return ctrl.Result{}, nil
+	}
+	// Manual offset takes precedence and is left untouched.
+	if replication.ReplicaFromExternal.ServerIdOffset != nil {
+		return ctrl.Result{}, nil
+	}
+	// Compute-once: never re-query once persisted.
+	if mdb.Status.ExternalReplication != nil && mdb.Status.ExternalReplication.ServerIdOffset != nil {
+		return ctrl.Result{}, nil
+	}
+	logger := log.FromContext(ctx).WithName("external-repl-server-id")
+
+	emdb, err := r.RefResolver.ExternalMariaDB(ctx, &replication.ReplicaFromExternal.MariaDBRef.ObjectReference, mdb.Namespace)
+	if err != nil {
+		logger.Info("error getting external MariaDB, requeuing", "err", err)
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+	if !emdb.IsReady() {
+		logger.Info("external MariaDB is not ready, requeuing")
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+
+	// The external MariaDB endpoint (e.g. a VIP fronting a MaxScale readconnroute) may resolve to
+	// either the primary or a replica. Server ids must be enumerated from the primary, as only it sees
+	// every replica registered in the topology (SHOW SLAVE HOSTS). If we land on a replica, follow
+	// SHOW REPLICA STATUS to the primary and connect there directly, reusing the same credentials/TLS.
+	client, err := sql.NewClientWithMariaDB(ctx, emdb, r.RefResolver)
+	if err != nil {
+		logger.Info("error connecting to external MariaDB, requeuing", "err", err)
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+	defer client.Close()
+
+	masterHost, masterPort, isReplica, err := client.ReplicationMasterEndpoint(ctx)
+	if err != nil {
+		logger.Info("error resolving external primary, requeuing", "err", err)
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+
+	primaryClient := client
+	if isReplica {
+		logger.Info("external endpoint is a replica, connecting to its primary",
+			"master-host", masterHost, "master-port", masterPort)
+		masterClient, err := sql.NewClientWithMariaDB(ctx, emdb, r.RefResolver, sql.WithHost(masterHost), sql.WithPort(masterPort))
+		if err != nil {
+			logger.Info("error connecting to external primary, requeuing", "err", err)
+			return ctrl.Result{RequeueAfter: time.Minute}, nil
+		}
+		defer masterClient.Close()
+		primaryClient = masterClient
+	}
+
+	ids, err := primaryClient.InUseServerIds(ctx)
+	if err != nil {
+		logger.Info("error getting in-use server ids, requeuing", "err", err)
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	}
+
+	offset := externalReplServerIdGap
+	if len(ids) > 0 {
+		offset = slices.Max(ids) + externalReplServerIdGap
+	}
+	logger.Info("discovered external replication server_id offset", "offset", offset, "in-use-server-ids", ids)
+
+	if err := r.patchStatus(ctx, mdb, func(status *mariadbv1alpha1.MariaDBStatus) error {
+		status.ExternalReplication = &mariadbv1alpha1.ExternalReplicationStatus{
+			ServerIdOffset: &offset,
+		}
+		return nil
+	}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error patching MariaDB status: %v", err)
+	}
+	return ctrl.Result{}, nil
 }
 
 func shouldReconcileReplicationRoleForPod(mdb *mariadbv1alpha1.MariaDB, podIndex int) bool {
@@ -105,11 +215,17 @@ func shouldReconcileReplicationRoleForPod(mdb *mariadbv1alpha1.MariaDB, podIndex
 
 func (r *MariaDBReconciler) getReplicationRoles(ctx context.Context,
 	mdb *mariadbv1alpha1.MariaDB) (map[string]mariadbv1alpha1.ReplicationRole, error) {
+	logger := log.FromContext(ctx)
+	logger.V(1).Info("Getting Replication Roles")
+	if !mdb.IsReplicationEnabled() && (mdb.Spec.MultiCluster == nil || !mdb.Spec.MultiCluster.Enabled) {
+		return nil, nil
+	}
+
 	clientSet := sql.NewClientSet(mdb, r.RefResolver)
 	defer clientSet.Close()
 
 	var replState map[string]mariadbv1alpha1.ReplicationRole
-	logger := log.FromContext(ctx)
+
 	for i := 0; i < int(mdb.Spec.Replicas); i++ {
 		if !shouldReconcileReplicationRoleForPod(mdb, i) {
 			continue
@@ -192,6 +308,8 @@ func (r *MariaDBReconciler) isMultiClusterPrimaryReplica(ctx context.Context, md
 
 func shouldReconcileReplicaStatusForPod(mdb *mariadbv1alpha1.MariaDB, podIndex int) bool {
 	isReplica := podIndex != *mdb.Status.CurrentPrimaryPodIndex
+	replication := mdb.Replication()
+	isExternalReplication := replication.IsExternalReplication()
 	if mdb.IsMultiClusterEnabled() {
 		if mdb.IsReplicationEnabled() {
 			return isReplica || mdb.IsMultiClusterPrimaryReplica(podIndex)
@@ -200,7 +318,7 @@ func shouldReconcileReplicaStatusForPod(mdb *mariadbv1alpha1.MariaDB, podIndex i
 		}
 		return false
 	}
-	return isReplica
+	return isReplica || isExternalReplication
 }
 
 func (r *MariaDBReconciler) getReplicaStatus(ctx context.Context,
@@ -215,8 +333,13 @@ func (r *MariaDBReconciler) getReplicaStatus(ctx context.Context,
 	defer clientSet.Close()
 
 	var replicaStatus map[string]mariadbv1alpha1.ReplicaStatus
+	replication := mdb.Replication()
 	for i := 0; i < int(mdb.Spec.Replicas); i++ {
 		if !shouldReconcileReplicaStatusForPod(mdb, i) {
+			continue
+		}
+
+		if i == *mdb.Status.CurrentPrimaryPodIndex && !replication.IsExternalReplication() {
 			continue
 		}
 		pod := stspkg.PodName(mdb.ObjectMeta, i)
@@ -244,7 +367,7 @@ func (r *MariaDBReconciler) getReplicaStatus(ctx context.Context,
 
 		var replOpts []sql.ReplicationOpt
 		if mdb.IsMultiClusterPrimaryReplica(i) {
-			replOpts = append(replOpts, sql.WithConnectionName(replication.MultiClusterReplicaConnectionName))
+			replOpts = append(replOpts, sql.WithConnectionName(*replication.MultiClusterReplicaConnectionName))
 		}
 		newReplicaStatus, err := client.ReplicaStatus(ctx, logger, replOpts...)
 		if err != nil {

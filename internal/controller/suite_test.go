@@ -58,7 +58,7 @@ var (
 	k8sClient                  client.Client
 	testRefResolver            *refresolver.RefResolver
 	testCidrPrefix             string
-	testEmulateExternalMdbHost string = "mdb-emulate-external-test.default.svc.cluster.local"
+	testEmulateExternalMdbHost string = "mdb-emulate-external-test-primary.default.svc.cluster.local"
 	// This is to make sure that backups taken during the tests are matched
 	testTargetRecoveryTime = &metav1.Time{Time: time.Now().Add(100 * time.Hour)}
 )

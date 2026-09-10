@@ -3,7 +3,7 @@ name: Helm
 on:
   push:
     branches:
-      - main
+      - "band/*"
     paths:
       - "deploy/charts/**"
   pull_request:
