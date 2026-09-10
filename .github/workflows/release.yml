@@ -78,6 +78,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
           registry: ghcr.io
 
+      - name: Set lowercase image owner
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          echo "OWNER=${OWNER,,}" >> $GITHUB_ENV
+
       - name: Publish multi-arch Docker image
         uses: docker/build-push-action@v7
         with:
@@ -87,8 +92,8 @@ jobs:
           file: ./Dockerfile
           platforms: linux/arm64,linux/amd64
           tags: |
-            ghcr.io/${{ github.repository_owner }}/mariadb-operator:${{ needs.args.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/mariadb-operator:latest
+            ghcr.io/${{ env.OWNER }}/mariadb-operator:${{ needs.args.outputs.VERSION }}
+            ghcr.io/${{ env.OWNER }}/mariadb-operator:latest
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.description=${{ github.event.repository.description }}
