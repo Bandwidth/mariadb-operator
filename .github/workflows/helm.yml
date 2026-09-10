@@ -191,6 +191,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           shopt -s nullglob
+          OWNER="${{ github.repository_owner }}"
+          OWNER="${OWNER,,}"
           for pkg in .cr-release-packages/*.tgz; do
             if [ -z "${pkg:-}" ]; then
               break
@@ -199,9 +201,9 @@ jobs:
             # e.g. mariadb-operator-crds-26.6.0.tgz -> chart_name=mariadb-operator-crds, chart_version=26.6.0
             chart_name=$(basename "${pkg}" .tgz | sed 's/-[0-9].*$//')
             chart_version=$(basename "${pkg}" .tgz | sed 's/^.*-\([0-9].*\)$/\1/')
-            repo="oci://ghcr.io/${{ github.repository_owner }}/charts"
+            repo="oci://ghcr.io/${OWNER}/charts"
 
-            if gh api "/orgs/${{ github.repository_owner }}/packages/container/charts%2F${chart_name}/versions" \
+            if gh api "/orgs/${OWNER}/packages/container/charts%2F${chart_name}/versions" \
                 --jq ".[].metadata.container.tags[]" 2>/dev/null | grep -q "^${chart_version}$"; then
               echo "Chart already exists: ${chart_name} ${chart_version}"
             else
