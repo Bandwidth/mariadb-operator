@@ -278,7 +278,7 @@ func (r *MariaDBReconciler) reconcileReplicasToRecover(ctx context.Context, repl
 	}
 
 	// Requeue to track replication status
-	return ctrl.Result{Requeue: true}, nil
+	return ctrl.Result{Requeue: true}, nil //nolint:staticcheck // Requeue gives exponential backoff, which RequeueAfter cannot express.
 }
 
 func (r *MariaDBReconciler) reconcileJobReplicaRecovery(ctx context.Context, replica string, physicalBackup *mariadbv1alpha1.PhysicalBackup,
