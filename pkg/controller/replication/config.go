@@ -99,6 +99,10 @@ func NewReplicationConfig(env *env.PodEnvironment) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error getting semi-sync boot as replica: %v", err)
 	}
+	semiSyncBootAsReplica, err := env.ReplSemiSyncBootAsReplica()
+	if err != nil {
+		return nil, fmt.Errorf("error getting semi-sync boot as replica: %v", err)
+	}
 	syncBinlog, err := env.ReplSyncBinlog()
 	if err != nil {
 		return nil, fmt.Errorf("error getting master sync binlog: %v", err)
