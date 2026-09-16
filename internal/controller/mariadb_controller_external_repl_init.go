@@ -377,7 +377,26 @@ func getBinlogExpireLogsDuration(emdb *mariadbv1alpha1.ExternalMariaDB, ctx cont
 	var binlogExpireLogsSecondsStr string
 	var binlogExpireLogsSeconds int
 
-	if semver.Compare("v"+emdb.Status.Version, "v10.6.1") >= 0 {
+	isRDS := false
+
+	// Check if it is an RDS instance
+	if user_exist, err := external_client.UserExists(ctx, "rdsadmin", "localhost"); err != nil && user_exist {
+		if table_exists, err := external_client.TableExists(ctx, "mysql", "rds_configuration"); err != nil && table_exists {
+			logger.Info("RDS config found")
+			isRDS = true
+		}
+		logger.Info("AWS user detected")
+	}
+
+	if isRDS {
+		logger.Info("Using 'binlog retention hours' in mysql.rds_configuration", "version", emdb.Status.Version)
+		binlogExpireLogsHourStr, err := external_client.RDSConfiguration(ctx, "binlog retention hours")
+		if err != nil {
+			return time.Duration(0), fmt.Errorf("unable to get 'binlog retention hours' from RDS instance: %v", err)
+		}
+		binlogExpireLogsHour, _ := strconv.Atoi(binlogExpireLogsHourStr)
+		binlogExpireLogsSeconds = binlogExpireLogsHour * 3600
+	} else if semver.Compare("v"+emdb.Status.Version, "v10.6.1") >= 0 {
 		logger.Info("Using binlog_expire_logs_seconds", "version", emdb.Status.Version)
 		binlogExpireLogsSecondsStr, err = external_client.SystemVariable(ctx, "binlog_expire_logs_seconds")
 		if err != nil {

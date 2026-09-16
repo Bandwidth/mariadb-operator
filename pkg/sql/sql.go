@@ -598,6 +598,22 @@ func (c *Client) UserExists(ctx context.Context, username, host string) (bool, e
 	return count > 0, nil
 }
 
+func (c *Client) TableExists(ctx context.Context, schema string, table string) (bool, error) {
+
+	row := c.db.QueryRowContext(ctx, `
+	SELECT COUNT(*) AS table_exists
+	FROM information_schema.tables 
+	WHERE 
+		table_schema = ? 
+  		AND table_name = ?;
+	`, schema, table)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (c *Client) GrantExists(ctx context.Context,
 	privileges []string,
 	database string,
@@ -769,6 +785,17 @@ func (c *Client) DropDatabase(ctx context.Context, database string) error {
 
 func (c *Client) SystemVariable(ctx context.Context, variable string) (string, error) {
 	sql := fmt.Sprintf("SELECT @@global.%s;", variable)
+	row := c.db.QueryRowContext(ctx, sql)
+
+	var val string
+	if err := row.Scan(&val); err != nil {
+		return "", nil
+	}
+	return val, nil
+}
+
+func (c *Client) RDSConfiguration(ctx context.Context, config string) (string, error) {
+	sql := fmt.Sprintf("SELECT value FROM mysql.rds_configuration WHERE name = '%s';", config)
 	row := c.db.QueryRowContext(ctx, sql)
 
 	var val string
