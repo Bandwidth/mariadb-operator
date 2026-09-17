@@ -380,12 +380,16 @@ func getBinlogExpireLogsDuration(emdb *mariadbv1alpha1.ExternalMariaDB, ctx cont
 	isRDS := false
 
 	// Check if it is an RDS instance
-	if user_exist, err := external_client.UserExists(ctx, "rdsadmin", "localhost"); err != nil && user_exist {
-		if table_exists, err := external_client.TableExists(ctx, "mysql", "rds_configuration"); err != nil && table_exists {
+	if user_exist, err := external_client.UserExists(ctx, "rdsadmin", "localhost"); err == nil && user_exist {
+		if table_exists, err := external_client.TableExists(ctx, "mysql", "rds_configuration"); err == nil && table_exists {
 			logger.Info("RDS config found")
 			isRDS = true
 		}
-		logger.Info("AWS user detected")
+		logger.Info("RDS user detected")
+	} else {
+		if err != nil {
+			logger.Info("Error querying external server for RDS discovery", "error", err)
+		}
 	}
 
 	if isRDS {
