@@ -26,6 +26,29 @@ entries:
     version: 26.6.0
   - apiVersion: v2
     appVersion: 0.0.0
+    created: "2026-09-17T14:31:27.658547893Z"
+    description: Create MariaDB cluster managed by mariadb-operator
+    digest: f17fb1cb5220ad6e931d3cf58fd2c58d23bc107c11795cb3afb88a3c03890866
+    home: https://github.com/mariadb-operator/mariadb-operator
+    icon: https://mariadb-operator.github.io/mariadb-operator/assets/mariadb_profile.svg
+    keywords:
+    - mariadb
+    - mysql
+    - operator
+    - mariadb-operator
+    - database
+    - maxscale
+    kubeVersion: '>=1.26.0-0'
+    maintainers:
+    - email: martin.montes@mariadb.com
+      name: mmontes11
+    name: mariadb-cluster
+    type: application
+    urls:
+    - mariadb-cluster-26.6.0-bandwidth.7.tgz
+    version: 26.6.0-bandwidth.7
+  - apiVersion: v2
+    appVersion: 0.0.0
     created: "2026-09-16T09:27:03.980133472Z"
     description: Create MariaDB cluster managed by mariadb-operator
     digest: 7091174e38dbfc38f220b2511dd53c46a6c9472935e84162f3ffc1832a16e1a3
@@ -352,6 +375,34 @@ entries:
     urls:
     - mariadb-operator-26.6.0.tgz
     version: 26.6.0
+  - apiVersion: v2
+    appVersion: 26.6.0-bandwidth.7
+    created: "2026-09-17T14:31:27.959295122Z"
+    dependencies:
+    - condition: crds.enabled
+      name: mariadb-operator-crds
+      repository: file://../mariadb-operator-crds
+      version: 26.6.0-bandwidth.7
+    description: Run and operate MariaDB in a cloud native way
+    digest: 692400cd57e2450e72790d80662657048028356e73287d899d965121816d1452
+    home: https://github.com/mariadb-operator/mariadb-operator
+    icon: https://mariadb-operator.github.io/mariadb-operator/assets/mariadb_profile.svg
+    keywords:
+    - mariadb
+    - mysql
+    - operator
+    - mariadb-operator
+    - database
+    - maxscale
+    kubeVersion: '>=1.26.0-0'
+    maintainers:
+    - email: martin.montes@mariadb.com
+      name: mmontes11
+    name: mariadb-operator
+    type: application
+    urls:
+    - mariadb-operator-26.6.0-bandwidth.7.tgz
+    version: 26.6.0-bandwidth.7
   - apiVersion: v2
     appVersion: 26.6.0-bandwidth.6
     created: "2026-09-16T09:27:04.219093626Z"
@@ -1950,6 +2001,29 @@ entries:
     version: 26.6.0
   - apiVersion: v2
     appVersion: 0.0.0
+    created: "2026-09-17T14:31:28.289033202Z"
+    description: mariadb-operator CRDs
+    digest: c238dfa4c3c7c4759fd7e3c2190045a0bf60f8ad4d81bcadd74502c9a25d8625
+    home: https://github.com/mariadb-operator/mariadb-operator
+    icon: https://mariadb-operator.github.io/mariadb-operator/assets/mariadb_profile.svg
+    keywords:
+    - mariadb
+    - mysql
+    - operator
+    - mariadb-operator
+    - database
+    - maxscale
+    kubeVersion: '>=1.26.0-0'
+    maintainers:
+    - email: martin.montes@mariadb.com
+      name: mmontes11
+    name: mariadb-operator-crds
+    type: application
+    urls:
+    - mariadb-operator-crds-26.6.0-bandwidth.7.tgz
+    version: 26.6.0-bandwidth.7
+  - apiVersion: v2
+    appVersion: 0.0.0
     created: "2026-09-16T09:27:04.419307274Z"
     description: mariadb-operator CRDs
     digest: 6b1e7321c28dae35502050af1ba8172d474f1228caec66a92b0c52ee8a988b64
@@ -2489,4 +2563,4 @@ entries:
     urls:
     - https://helm.mariadb.com/mariadb-operator/releases/download/mariadb-operator-crds-0.0.32/mariadb-operator-crds-0.0.32.tgz
     version: 0.0.32
-generated: "2026-09-16T09:27:04.419728215Z"
+generated: "2026-09-17T14:31:28.289603332Z"
