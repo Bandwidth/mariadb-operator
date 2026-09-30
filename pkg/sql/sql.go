@@ -1321,6 +1321,7 @@ MASTER_PASSWORD='{{ .Password }}',
 MASTER_CONNECT_RETRY={{ . }},
 {{- end }}
 {{- if .Demote }}
+MASTER_USE_GTID=slave_pos,
 MASTER_DEMOTE_TO_SLAVE=1;
 {{- else }}
 MASTER_USE_GTID={{ .Gtid }};
