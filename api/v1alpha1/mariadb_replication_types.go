@@ -255,11 +255,22 @@ type ReplicaFromExternal struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	FilteredReplicaTables []string `json:"filteredReplicaTables,omitempty"`
+	// IgnoredReplicaTables is an optional list of tables in "database.table" format to exclude from replication.
+	// When set, the replication will be configured with replicate_ignore_table for each entry. GTID strict mode
+	// is automatically disabled when this field is set, as partial replication is incompatible with it.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	IgnoredReplicaTables []string `json:"ignoredReplicaTables,omitempty"`
 }
 
 // HasFilteredTables returns true when at least one filtered table is defined.
 func (r *ReplicaFromExternal) HasFilteredTables() bool {
 	return len(r.FilteredReplicaTables) > 0
+}
+
+// HasIgnoredTables returns true when at least one ignored table is defined.
+func (r *ReplicaFromExternal) HasIgnoredTables() bool {
+	return len(r.IgnoredReplicaTables) > 0
 }
 
 // SetDefaults fills the current ReplicaReplication object with DefaultReplicationSpec.
@@ -466,8 +477,9 @@ func (r *Replication) SetDefaults(mdb *MariaDB, env *environment.OperatorEnv) er
 	}
 
 	if r.GtidStrictMode == nil {
-		// Filtered replica is incompatible with GTID strict mode; disable it automatically.
-		if r.IsExternalReplication() && r.ReplicaFromExternal.HasFilteredTables() {
+		// Filtered/ignored replica is incompatible with GTID strict mode; disable it automatically.
+		if r.IsExternalReplication() &&
+			(r.ReplicaFromExternal.HasFilteredTables() || r.ReplicaFromExternal.HasIgnoredTables()) {
 			r.GtidStrictMode = ptr.To(false)
 		} else {
 			r.GtidStrictMode = ptr.To(true)

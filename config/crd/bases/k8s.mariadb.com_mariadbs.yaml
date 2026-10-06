@@ -5450,6 +5450,14 @@ spec:
                         description: HealthCheckInterval to be used when the replica
                           connects to the primary.
                         type: string
+                      ignoredReplicaTables:
+                        description: |-
+                          IgnoredReplicaTables is an optional list of tables in "database.table" format to exclude from replication.
+                          When set, the replication will be configured with replicate_ignore_table for each entry. GTID strict mode
+                          is automatically disabled when this field is set, as partial replication is incompatible with it.
+                        items:
+                          type: string
+                        type: array
                       mariaDbRef:
                         description: MariaDBRef is a reference to a MariaDB object.
                         properties:
