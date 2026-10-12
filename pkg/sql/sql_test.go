@@ -61,6 +61,7 @@ MASTER_USE_GTID=CurrentPos;
 				WithChangeMasterDemote(true),
 			},
 			wantQuery: `CHANGE MASTER  TO
+MASTER_SSL_VERIFY_SERVER_CERT=0,
 MASTER_HOST='127.0.0.1',
 MASTER_PORT=3306,
 MASTER_USER='repl',

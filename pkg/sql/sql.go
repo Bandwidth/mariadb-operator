@@ -1355,7 +1355,30 @@ func (c *Client) IsReplicationConfigured(ctx context.Context) (bool, string) {
 
 func (c *Client) GetReplicationStatus(ctx context.Context) (ReplicaStatus, error) {
 	query := "SHOW REPLICA STATUS"
-	row := c.db.QueryRowContext(ctx, query)
+	results, err := c.QueryColumnMaps(ctx, query)
+
+	if err != nil {
+		return ReplicaStatus{}, fmt.Errorf("failed to query replica status: %w", err)
+	}
+
+	if len(results) == 0 {
+		return ReplicaStatus{}, fmt.Errorf("replication is not configured: %w", sql.ErrNoRows)
+	}
+
+	// SHOW REPLICA STATUS returns 1 row for default channel
+	row := results[0]
+
+	// Helper for case-insensitive key lookup across different MySQL/MariaDB versions
+	getVal := func(keys ...string) string {
+		for _, target := range keys {
+			for k, v := range row {
+				if strings.EqualFold(k, target) {
+					return v
+				}
+			}
+		}
+		return ""
+	}
 
 	var status ReplicaStatus
 
@@ -1363,73 +1386,27 @@ func (c *Client) GetReplicationStatus(ctx context.Context) (ReplicaStatus, error
 	// match the order of columns in the query result.
 	// You must list ALL columns, even if you don't use them.
 	// This is a limitation of SHOW REPLICA STATUS and rows.Scan().
-	var ignored any // Used to scan columns you don't care about.
 
-	err := row.Scan(
-		&ignored, // Slave_IO_State
-		&status.MasterHost,
-		&status.MasterUser,
-		&status.MasterPort,
-		&ignored, // Connect_Retry
-		&ignored, // Master_Log_File
-		&ignored, // Read_Master_Log_Pos
-		&ignored, // Relay_Log_File
-		&ignored, // Relay_Log_Pos
-		&ignored, // Relay_Master_Log_File
-		&status.SlaveIORunning,
-		&status.SlaveSQLRunning,
-		&ignored,          // Replicate_Do_DB
-		&ignored,          // Replicate_Ignore_DB
-		&ignored,          // Replicate_Do_Table
-		&ignored,          // Replicate_Ignore_Table
-		&ignored,          // Replicate_Wild_Do_Table
-		&ignored,          // Replicate_Wild_Ignore_Table
-		&ignored,          // Last_Errno
-		&status.LastError, // Note: Last_Error in output, maps to LastSQLError in struct
-		&ignored,          // Skip_Counter
-		&ignored,          // Exec_Master_Log_Pos
-		&ignored,          // Relay_Log_Space
-		&ignored,          // Until_Condition
-		&ignored,          // Until_Log_File
-		&ignored,          // Until_Log_Pos
-		&ignored,          // Master_SSL_Allowed
-		&ignored,          // Master_SSL_CA_File
-		&ignored,          // Master_SSL_CA_Path
-		&ignored,          // Master_SSL_Cert
-		&ignored,          // Master_SSL_Cipher
-		&ignored,          // Master_SSL_Key
-		&status.SecondsBehindMaster,
-		&ignored,             // Master_SSL_Verify_Server_Cert
-		&status.LastIOErrno,  // Last_IO_Errno
-		&status.LastIOError,  // Note: Last_IO_Error in output, maps to LastIOError in struct
-		&status.LastSQLErrno, // Last_SQL_Errno
-		&status.LastSQLError, // Last_SQL_Error
-		&ignored,             // Replicate_Ignore_Server_Ids
-		&ignored,             // Master_Server_Id
-		&ignored,             // Master_SSL_Crl
-		&ignored,             // Master_SSL_Crlpath
-		&ignored,             // Using_Gtid
-		&ignored,             // Gtid_IO_Pos
-		&ignored,             // Replicate_Do_Domain_Ids
-		&ignored,             // Replicate_Ignore_Domain_Ids
-		&ignored,             // Parallel_Mode
-		&ignored,             // SQL_Delay
-		&ignored,             // SQL_Remaining_Delay
-		&ignored,             // Slave_SQL_Running_State
-		&ignored,             // Slave_DDL_Groups
-		&ignored,             // Slave_Non_Transactional_Groups
-		&ignored,             // Slave_Transactional_Groups
-		&ignored,             // Replicate_Rewrite_DB
-	)
+	status.MasterHost = toNullString(getVal("Master_Host", "Source_Host"))
+	status.MasterUser = toNullString(getVal("Master_User", "Source_User"))
+	status.MasterPort = toNullInt32(getVal("Master_Port", "Source_Port"))
+	status.SlaveIORunning = getVal("Slave_IO_Running", "Replica_IO_Running")
+	status.SlaveSQLRunning = getVal("Slave_SQL_Running", "Replica_SQL_Running")
+	status.LastError = toNullString(getVal("Last_Error"))
+	status.LastIOError = toNullString(getVal("Last_IO_Error"))
+	status.LastIOErrno = toNullInt32(getVal("Last_IO_Errno"))
+	status.LastSQLError = toNullString(getVal("Last_SQL_Error"))
+	status.LastSQLErrno = toNullInt32(getVal("Last_SQL_Errno"))
+	status.SecondsBehindMaster = toNullInt64(getVal("Seconds_Behind_Master", "Seconds_Behind_Source"))
 
-	if err != nil {
-		// If no rows were returned, it means replication is not configured.
-		if err == sql.ErrNoRows {
-			return status, fmt.Errorf("replication is not configured: %w", err) // Return nil to indicate not configured.
-		}
-		// Otherwise, it's a real database error.
-		return status, fmt.Errorf("failed to scan replica status: %w", err)
-	}
+	// if err != nil {
+	// 	// If no rows were returned, it means replication is not configured.
+	// 	if err == sql.ErrNoRows {
+	// 		return status, fmt.Errorf("replication is not configured: %w", err) // Return nil to indicate not configured.
+	// 	}
+	// 	// Otherwise, it's a real database error.
+	// 	return status, fmt.Errorf("failed to scan replica status: %w", err)
+	// }
 
 	return status, nil
 
@@ -1580,4 +1557,27 @@ func parseBool(s string) (bool, error) {
 	default:
 		return false, fmt.Errorf("invalid bool value: %s", s)
 	}
+}
+
+func toNullString(s string) sql.NullString {
+	if s == "" || strings.EqualFold(s, "NULL") || strings.EqualFold(s, "<nil>") {
+		return sql.NullString{Valid: false}
+	}
+	return sql.NullString{String: s, Valid: true}
+}
+
+func toNullInt32(s string) sql.NullInt32 {
+	val, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return sql.NullInt32{Valid: false}
+	}
+	return sql.NullInt32{Int32: int32(val), Valid: true}
+}
+
+func toNullInt64(s string) sql.NullInt64 {
+	val, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return sql.NullInt64{Valid: false}
+	}
+	return sql.NullInt64{Int64: val, Valid: true}
 }

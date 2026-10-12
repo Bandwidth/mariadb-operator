@@ -36,6 +36,9 @@ func (r *ReplicationReconciler) reconcileSemiSync(ctx context.Context, req *Reco
 	if !req.mariadb.IsSemiSyncEnabled() {
 		return nil
 	}
+	if req.mariadb.Spec.Replication.IsExternalReplication() {
+		return nil
+	}
 
 	for i := 0; i < int(req.mariadb.Spec.Replicas); i++ {
 		podLogger := logger.WithValues("pod", statefulset.PodName(req.mariadb.ObjectMeta, i))
