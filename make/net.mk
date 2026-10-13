@@ -71,6 +71,14 @@ host-mariadb-repl-ext-multi-schema: ## Add mariadb-repl-ext-multi-schema hosts t
 	@./hack/add_host.sh 0 202 mariadb-repl-ext-multi-schema-2.mariadb-repl-ext-multi-schema-internal.default.svc.cluster.local
 	@./hack/add_host.sh 0 203 mariadb-repl-ext-multi-schema-3.mariadb-repl-ext-multi-schema-internal.default.svc.cluster.local
 
+.PHONY: host-mariadb-repl-ext-ignored
+host-mariadb-repl-ext-ignored: ## Add mariadb-repl-ext-ignored hosts to /etc/hosts.
+	@./hack/add_host.sh 0 233 mariadb-repl-ext-ignored.default.svc.cluster.local
+	@./hack/add_host.sh 0 234 mariadb-repl-ext-ignored-primary.default.svc.cluster.local
+	@./hack/add_host.sh 0 235 mariadb-repl-ext-ignored-secondary.default.svc.cluster.local
+	@./hack/add_host.sh 0 236 mariadb-repl-ext-ignored-0.mariadb-repl-ext-ignored-internal.default.svc.cluster.local
+	@./hack/add_host.sh 0 237 mariadb-repl-ext-ignored-1.mariadb-repl-ext-ignored-internal.default.svc.cluster.local
+
 .PHONY: host-mariadb-repl-ext-autodiscovery
 host-mariadb-repl-ext-autodiscovery: ## Add mariadb-repl-ext server_id offset auto-discovery hosts to /etc/hosts.
 	@./hack/add_host.sh 0 207 mdb-autodisc-master-0.mdb-autodisc-master-internal.default.svc.cluster.local
@@ -162,7 +170,7 @@ host-multi-cluster-mxs: ## Add multi-cluster maxscale hosts to /etc/hosts.
 	@./hack/add_host.sh 1 27 maxscale-eu-central-1.maxscale-eu-central-internal.default.svc.cluster.local
 
 .PHONY: host
-host: host-mariadb host-mdb-test host-mdb-emulated-external-test host-mxs-test host-mariadb-repl host-mariadb-repl-ext-filtered host-mariadb-repl-ext-multi-schema host-mariadb-repl-ext-autodiscovery host-mariadb-galera host-mariadb-galera-test host-monitoring host-minio host-maxscale-repl host-maxscale-galera host-maxscale-gui host-multi-cluster host-multi-cluster-mxs host-azurite ## Configure hosts for local development.
+host: host-mariadb host-mdb-test host-mdb-emulated-external-test host-mxs-test host-mariadb-repl host-mariadb-repl-ext-filtered host-mariadb-repl-ext-multi-schema host-mariadb-repl-ext-ignored host-mariadb-repl-ext-autodiscovery host-mariadb-galera host-mariadb-galera-test host-monitoring host-minio host-maxscale-repl host-maxscale-galera host-maxscale-gui host-multi-cluster host-multi-cluster-mxs host-azurite ## Configure hosts for local development.
 
 .PHONY: net
 net: install-metallb host ## Configure networking for local development.

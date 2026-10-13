@@ -2511,6 +2511,96 @@ var _ = Describe("MariaDB types", func() {
 		)
 	})
 
+	Context("When using ignoredReplicaTables in a ReplicaFromExternal object", func() {
+		newExternalReplMariaDB := func(filtered, ignored []string) *MariaDB {
+			return &MariaDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "mariadb-ignored-tables",
+					Namespace: testNamespace,
+				},
+				Spec: MariaDBSpec{
+					Replicas: 1,
+					Storage: Storage{
+						Size: ptr.To(resource.MustParse("100Mi")),
+					},
+					Replication: &Replication{
+						Enabled: true,
+						ReplicationSpec: ReplicationSpec{
+							ReplicaFromExternal: &ReplicaFromExternal{
+								MariaDBRef: MariaDBRef{
+									ObjectReference: ObjectReference{
+										Name: "external-mariadb",
+									},
+									Kind: ExternalMariaDBKind,
+								},
+								FilteredReplicaTables: filtered,
+								IgnoredReplicaTables:  ignored,
+							},
+						},
+					},
+				},
+			}
+		}
+
+		DescribeTable(
+			"Should report ignored tables",
+			func(ext *ReplicaFromExternal, expected bool) {
+				Expect(ext.HasIgnoredTables()).To(Equal(expected))
+			},
+			Entry("nil list", &ReplicaFromExternal{}, false),
+			Entry("empty list", &ReplicaFromExternal{IgnoredReplicaTables: []string{}}, false),
+			Entry("one table", &ReplicaFromExternal{IgnoredReplicaTables: []string{"db.t1"}}, true),
+		)
+
+		DescribeTable(
+			"Should default GTID strict mode",
+			func(filtered, ignored []string, expected bool) {
+				mdb := newExternalReplMariaDB(filtered, ignored)
+				Expect(mdb.Spec.Replication.SetDefaults(mdb, env)).To(Succeed())
+				Expect(mdb.Spec.Replication.GtidStrictMode).NotTo(BeNil())
+				Expect(*mdb.Spec.Replication.GtidStrictMode).To(Equal(expected))
+			},
+			Entry("no table selection", nil, nil, true),
+			Entry("filtered tables", []string{"db.t1"}, nil, false),
+			Entry("ignored tables", nil, []string{"db.t1"}, false),
+		)
+
+		DescribeTable(
+			"Should name the logical backup",
+			func(filtered, ignored []string, hashed bool) {
+				name := newExternalReplMariaDB(filtered, ignored).ExternalReplLogicalBackupName()
+				if hashed {
+					Expect(name).To(HavePrefix("external-mariadb-"))
+					Expect(name).NotTo(Equal("external-mariadb"))
+				} else {
+					Expect(name).To(Equal("external-mariadb"))
+				}
+			},
+			Entry("no table selection reuses the external MariaDB name", nil, nil, false),
+			Entry("filtered tables get a dedicated name", []string{"db.t1"}, nil, true),
+			Entry("ignored tables get a dedicated name", nil, []string{"db.t1"}, true),
+		)
+
+		It("should reject filteredReplicaTables and ignoredReplicaTables together", func() {
+			mdb := newExternalReplMariaDB([]string{"db.t1"}, []string{"db.t2"})
+			_ = k8sClient.Delete(testCtx, mdb)
+			err := k8sClient.Create(testCtx, mdb)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("filteredReplicaTables and ignoredReplicaTables are mutually exclusive"))
+		})
+
+		It("should accept either list on its own", func() {
+			for _, mdb := range []*MariaDB{
+				newExternalReplMariaDB([]string{"db.t1"}, nil),
+				newExternalReplMariaDB(nil, []string{"db.t2"}),
+			} {
+				_ = k8sClient.Delete(testCtx, mdb)
+				Expect(k8sClient.Create(testCtx, mdb)).To(Succeed())
+				_ = k8sClient.Delete(testCtx, mdb)
+			}
+		})
+	})
+
 	Context("When defaulting a ReplicaFromExternal object", func() {
 		It("should not default serverIdOffset (nil means auto-discover)", func() {
 			ext := &ReplicaFromExternal{}

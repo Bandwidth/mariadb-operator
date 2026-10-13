@@ -92,6 +92,21 @@ var (
 		Namespace: testNamespace,
 	}
 
+	testMdbERIgnoredKey = types.NamespacedName{
+		Name:      "mariadb-repl-ext-ignored",
+		Namespace: testNamespace,
+	}
+
+	testMdbPbRecoveryERIgnoredKey = types.NamespacedName{
+		Name:      testMdbERIgnoredKey.Name + "-pb-recovery",
+		Namespace: testNamespace,
+	}
+
+	testPbTemplateERIgnoredKey = types.NamespacedName{
+		Name:      testMdbERIgnoredKey.Name + "-backup-template",
+		Namespace: testNamespace,
+	}
+
 	testMdbERMultiSchemaKey = types.NamespacedName{
 		Name:      "mariadb-repl-ext-multi-schema",
 		Namespace: testNamespace,
