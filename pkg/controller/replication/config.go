@@ -101,6 +101,7 @@ func NewReplicationConfig(env *env.PodEnvironment) ([]byte, error) {
 	}
 
 	filteredTables := env.ExternalReplFilteredTables()
+	ignoredTables := env.ExternalReplIgnoredTables()
 
 	// To facilitate switchover/failover and avoid clashing with MaxScale, this configuration allows any Pod to act either as a primary or a replica:
 	// replica-side semi-sync is enabled everywhere, so any node can acknowledge without reconfiguration.
@@ -141,6 +142,9 @@ sync_binlog={{ . }}
 {{- range .ReplicateDoTables }}
 replicate_do_table={{ . }}
 {{- end }}
+{{- range .ReplicateIgnoreTables }}
+replicate_ignore_table={{ . }}
+{{- end }}
 `)
 	buf := new(bytes.Buffer)
 	err = tpl.Execute(buf, struct {
@@ -155,6 +159,7 @@ replicate_do_table={{ . }}
 		SyncBinlog                *int
 		ServerID                  int
 		ReplicateDoTables         []string
+		ReplicateIgnoreTables     []string
 	}{
 		LogName:                   env.MariadbName,
 		GtidStrictMode:            gtidStrictMode,
@@ -167,6 +172,7 @@ replicate_do_table={{ . }}
 		ServerID:                  sId,
 		SyncBinlog:                syncBinlog,
 		ReplicateDoTables:         filteredTables,
+		ReplicateIgnoreTables:     ignoredTables,
 	})
 	if err != nil {
 		return nil, err

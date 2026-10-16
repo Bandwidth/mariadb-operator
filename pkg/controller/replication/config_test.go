@@ -350,6 +350,42 @@ server_id=10
 `,
 			wantErr: false,
 		},
+		{
+			name: "filtered tables",
+			env: &env.PodEnvironment{
+				PodName:                           "mariadb-0",
+				MariadbName:                       "mariadb",
+				MariaDBReplEnabled:                "true",
+				MariaDBReplSemiSyncEnabled:        "false",
+				MariaDBExternalReplFilteredTables: "db.t1,db.t2",
+			},
+			wantConfig: `[mariadb]
+log_bin
+log_basename=mariadb
+server_id=10
+replicate_do_table=db.t1
+replicate_do_table=db.t2
+`,
+			wantErr: false,
+		},
+		{
+			name: "ignored tables",
+			env: &env.PodEnvironment{
+				PodName:                          "mariadb-0",
+				MariadbName:                      "mariadb",
+				MariaDBReplEnabled:               "true",
+				MariaDBReplSemiSyncEnabled:       "false",
+				MariaDBExternalReplIgnoredTables: "db.t1,db.t2",
+			},
+			wantConfig: `[mariadb]
+log_bin
+log_basename=mariadb
+server_id=10
+replicate_ignore_table=db.t1
+replicate_ignore_table=db.t2
+`,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

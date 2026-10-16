@@ -243,7 +243,7 @@ func (r *MariaDBReconciler) reconcileLogicalBackup(ctx context.Context, mariadb 
 			return ctrl.Result{}, fmt.Errorf("error getting logical backup template: %v", err)
 		}
 		backup_error := newBackup(emdb, *r, ctx, binlogExpireLogsDuration, mariadb.GetImagePullSecrets(), mariadb.Spec.Storage.Size,
-			key, replication.ReplicaFromExternal.FilteredReplicaTables, template)
+			key, replication.ReplicaFromExternal.FilteredReplicaTables, replication.ReplicaFromExternal.IgnoredReplicaTables, template)
 		return ctrl.Result{RequeueAfter: time.Minute * 1}, backup_error
 	}
 
@@ -292,11 +292,9 @@ func removeBackupIfExpired(existingBackup mariadbv1alpha1.Backup, ctx context.Co
 
 // newBackup creates a Backup object to take a backup of the external MariaDB.
 // The backup will be used to restore the replica pods.
-func newBackup(emdb *mariadbv1alpha1.ExternalMariaDB, r MariaDBReconciler, ctx context.Context,
-	binlogExpireLogsDuration time.Duration, imagePullSecrets []mariadbv1alpha1.LocalObjectReference,
-	size *resource.Quantity, key types.NamespacedName, filteredTables []string,
-	template *mariadbv1alpha1.Backup) error {
-
+// externalReplDumpArgs returns the mariadb-dump arguments used to seed the replicas from the external MariaDB.
+// Every ignored "database.table" is excluded from the dump so it matches the replicate_ignore_table filter.
+func externalReplDumpArgs(ignoredTables []string) []string {
 	args := []string{
 		"--master-data=1",
 		"--gtid",
@@ -304,6 +302,18 @@ func newBackup(emdb *mariadbv1alpha1.ExternalMariaDB, r MariaDBReconciler, ctx c
 		"--single-transaction",
 		"--ignore-table=mysql.global_priv",
 	}
+	for _, t := range ignoredTables {
+		args = append(args, fmt.Sprintf("--ignore-table=%s", t))
+	}
+	return args
+}
+
+func newBackup(emdb *mariadbv1alpha1.ExternalMariaDB, r MariaDBReconciler, ctx context.Context,
+	binlogExpireLogsDuration time.Duration, imagePullSecrets []mariadbv1alpha1.LocalObjectReference,
+	size *resource.Quantity, key types.NamespacedName, filteredTables []string, ignoredTables []string,
+	template *mariadbv1alpha1.Backup) error {
+
+	args := externalReplDumpArgs(ignoredTables)
 
 	backupOps := builder.BackupOpts{
 		Metadata: []*mariadbv1alpha1.Metadata{emdb.Spec.InheritMetadata},

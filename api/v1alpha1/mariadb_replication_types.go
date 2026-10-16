@@ -217,6 +217,7 @@ type ReplicaReplication struct {
 }
 
 // ReplicaFromExternal is the replication configuration from external servers.
+// +kubebuilder:validation:XValidation:rule="!(has(self.filteredReplicaTables) && size(self.filteredReplicaTables) > 0 && has(self.ignoredReplicaTables) && size(self.ignoredReplicaTables) > 0)",message="filteredReplicaTables and ignoredReplicaTables are mutually exclusive"
 type ReplicaFromExternal struct {
 
 	// MariaDBRef is a reference to a MariaDB object.
@@ -255,11 +256,24 @@ type ReplicaFromExternal struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	FilteredReplicaTables []string `json:"filteredReplicaTables,omitempty"`
+	// IgnoredReplicaTables is an optional list of tables in "database.table" format to exclude from replication.
+	// When set, the logical backup will skip these tables (--ignore-table) and the replication will be
+	// configured with replicate_ignore_table for each entry. It is mutually exclusive with filteredReplicaTables.
+	// The list is applied when the replicas are initialized from the logical backup, so it cannot be changed afterwards.
+	// GTID strict mode is automatically disabled when this field is set, as partial replication is incompatible with it.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	IgnoredReplicaTables []string `json:"ignoredReplicaTables,omitempty" webhook:"inmutable"`
 }
 
 // HasFilteredTables returns true when at least one filtered table is defined.
 func (r *ReplicaFromExternal) HasFilteredTables() bool {
 	return len(r.FilteredReplicaTables) > 0
+}
+
+// HasIgnoredTables returns true when at least one ignored table is defined.
+func (r *ReplicaFromExternal) HasIgnoredTables() bool {
+	return len(r.IgnoredReplicaTables) > 0
 }
 
 // SetDefaults fills the current ReplicaReplication object with DefaultReplicationSpec.
@@ -494,8 +508,9 @@ func (r *Replication) SetDefaults(mdb *MariaDB, env *environment.OperatorEnv) er
 	}
 
 	if r.GtidStrictMode == nil {
-		// Filtered replica is incompatible with GTID strict mode; disable it automatically.
-		if r.IsExternalReplication() && r.ReplicaFromExternal.HasFilteredTables() {
+		// Partial replication is incompatible with GTID strict mode; disable it automatically.
+		if r.IsExternalReplication() &&
+			(r.ReplicaFromExternal.HasFilteredTables() || r.ReplicaFromExternal.HasIgnoredTables()) {
 			r.GtidStrictMode = ptr.To(false)
 		} else {
 			r.GtidStrictMode = ptr.To(true)
@@ -587,7 +602,9 @@ func (m *MariaDB) IsExternalReplInitialing() bool {
 func (m *MariaDB) ExternalReplLogicalBackupName() string {
 	ext := m.Replication().ReplicaFromExternal
 	emdbName := ext.MariaDBRef.Name
-	if !ext.HasFilteredTables() {
+	// A table selection makes the dump differ from the plain external MariaDB one, so it gets its own
+	// Backup name to avoid reusing a stale unfiltered backup.
+	if !ext.HasFilteredTables() && !ext.HasIgnoredTables() {
 		return emdbName
 	}
 
