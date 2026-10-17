@@ -456,6 +456,8 @@ Container object definition.
 _Appears in:_
 - [MariaDBPodTemplate](#mariadbpodtemplate)
 - [MariaDBSpec](#mariadbspec)
+- [MaxScalePodTemplate](#maxscalepodtemplate)
+- [MaxScaleSpec](#maxscalespec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
@@ -1785,6 +1787,7 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `podMetadata` _[Metadata](#metadata)_ | PodMetadata defines extra metadata for the Pod. |  |  |
 | `imagePullSecrets` _[LocalObjectReference](#localobjectreference) array_ | ImagePullSecrets is the list of pull Secrets to be used to pull the image. |  |  |
+| `sidecarContainers` _[Container](#container) array_ | SidecarContainers to be used in the Pod. |  |  |
 | `podSecurityContext` _[PodSecurityContext](#podsecuritycontext)_ | SecurityContext holds pod-level security attributes and common container settings. |  |  |
 | `serviceAccountName` _string_ | ServiceAccountName is the name of the ServiceAccount to be used by the Pods. |  |  |
 | `affinity` _[AffinityConfig](#affinityconfig)_ | Affinity to be used in the Pod. |  |  |
@@ -1864,6 +1867,7 @@ _Appears in:_
 | `lifecycle` _[Lifecycle](#lifecycle)_ | Lifecycle are actions that the management system should take in response to container lifecycle events. |  |  |
 | `podMetadata` _[Metadata](#metadata)_ | PodMetadata defines extra metadata for the Pod. |  |  |
 | `imagePullSecrets` _[LocalObjectReference](#localobjectreference) array_ | ImagePullSecrets is the list of pull Secrets to be used to pull the image. |  |  |
+| `sidecarContainers` _[Container](#container) array_ | SidecarContainers to be used in the Pod. |  |  |
 | `podSecurityContext` _[PodSecurityContext](#podsecuritycontext)_ | SecurityContext holds pod-level security attributes and common container settings. |  |  |
 | `serviceAccountName` _string_ | ServiceAccountName is the name of the ServiceAccount to be used by the Pods. |  |  |
 | `affinity` _[AffinityConfig](#affinityconfig)_ | Affinity to be used in the Pod. |  |  |
