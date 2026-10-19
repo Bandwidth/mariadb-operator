@@ -439,6 +439,9 @@ var _ = Describe("MariaDB replication scale out", Ordered, func() {
 		mdb = buildTestMariaDBWithRepl(key)
 		applyMariadbTestConfig(mdb)
 
+		By("Deleting leftover scale out VolumeSnapshots")
+		deleteVolumeSnapshots(mdb.PhysicalBackupScaleOutKey())
+
 		By("Creating MariaDB with replication")
 		Expect(k8sClient.Create(testCtx, mdb)).To(Succeed())
 		DeferCleanup(func() {
