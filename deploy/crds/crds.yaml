@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: backups.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -1167,7 +1167,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: connections.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -1421,7 +1421,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: databases.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -1598,7 +1598,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: externalmariadbs.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -2007,7 +2007,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: grants.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -2208,7 +2208,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: mariadbs.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -9296,7 +9296,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: maxscales.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -12105,7 +12105,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: physicalbackups.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -13145,7 +13145,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: pointintimerecoveries.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -13433,7 +13433,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: restores.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -14456,7 +14456,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: sqljobs.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
@@ -15189,7 +15189,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: users.k8s.mariadb.com
 spec:
   group: k8s.mariadb.com
