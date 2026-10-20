@@ -19,6 +19,7 @@ type CertOpts struct {
 	Key                   *types.NamespacedName
 	Owner                 metav1.Object
 	DNSNames              []string
+	IPAddresses           []string
 	Lifetime              *time.Duration
 	RenewBeforePercentage *int32
 	Usages                []certmanagerv1.KeyUsage
@@ -42,6 +43,12 @@ func WithOwner(owner metav1.Object) CertOpt {
 func WithDNSnames(names []string) CertOpt {
 	return func(o *CertOpts) {
 		o.DNSNames = names
+	}
+}
+
+func WithIPAddresses(ipAddresses []string) CertOpt {
+	return func(o *CertOpts) {
+		o.IPAddresses = ipAddresses
 	}
 }
 
@@ -100,6 +107,7 @@ func (b *Builder) BuildCertificate(certOpts ...CertOpt) (*certmanagerv1.Certific
 			Duration:    &metav1.Duration{Duration: *opts.Lifetime},
 			RenewBefore: &metav1.Duration{Duration: *renewBefore},
 			DNSNames:    opts.DNSNames,
+			IPAddresses: opts.IPAddresses,
 			CommonName:  opts.DNSNames[0],
 			Usages:      opts.Usages,
 			IssuerRef:   *opts.IssuerRef,

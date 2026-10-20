@@ -27,6 +27,7 @@ type CertReconcilerOpts struct {
 	certSecretKey   types.NamespacedName
 	certCommonName  string
 	certDNSNames    []string
+	certIPAddresses []string
 	certLifetime    time.Duration
 	certKeyUsage    x509.KeyUsage
 	certExtKeyUsage []x509.ExtKeyUsage
@@ -81,6 +82,12 @@ func WithCert(shouldIssue bool, secretKey types.NamespacedName, dnsNames []strin
 			o.certCommonName = dnsNames[0]
 		}
 		o.certDNSNames = dnsNames
+	}
+}
+
+func WithCertIPAddresses(ipAddresses []string) CertReconcilerOpt {
+	return func(o *CertReconcilerOpts) {
+		o.certIPAddresses = ipAddresses
 	}
 }
 
@@ -166,6 +173,7 @@ func (o *CertReconcilerOpts) Certx509Opts() ([]pki.X509Opt, error) {
 	return []pki.X509Opt{
 		pki.WithCommonName(o.certCommonName),
 		pki.WithDNSNames(o.certDNSNames...),
+		pki.WithIPAddresses(o.certIPAddresses...),
 		pki.WithNotBefore(time.Now().Add(-1 * time.Hour)),
 		pki.WithNotAfter(time.Now().Add(o.certLifetime)),
 		pki.WithKeyUsage(o.certKeyUsage),

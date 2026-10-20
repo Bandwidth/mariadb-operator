@@ -503,6 +503,20 @@ type TLS struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
 	ServerCertAdditionalNames []string `json:"serverCertAdditionalNames,omitempty"`
+	// ServerCertSubjectAltNames are additional Subject Alternative Names (DNS names and IP addresses) added to the server certificate.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced"}
+	ServerCertSubjectAltNames *SubjectAltNames `json:"serverCertSubjectAltNames,omitempty"`
+}
+
+// SubjectAltNames are additional Subject Alternative Names for a certificate.
+type SubjectAltNames struct {
+	// DNSNames is a list of additional DNS names.
+	// +optional
+	DNSNames []string `json:"dnsNames,omitempty"`
+	// IPAddresses is a list of additional IP addresses.
+	// +optional
+	IPAddresses []string `json:"ipAddresses,omitempty"`
 }
 
 // Refer to the Kubernetes docs: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.36/#volume-v1-core.
@@ -1333,8 +1347,18 @@ func (m *MariaDB) TLSServerDNSNames() []string {
 	names = append(names, statefulset.ServiceNameVariants(m.ObjectMeta, m.PrimaryServiceKey().Name)...)
 	names = append(names, statefulset.ServiceNameVariants(m.ObjectMeta, m.SecondaryServiceKey().Name)...)
 	names = append(names, ptr.Deref(m.Spec.TLS, TLS{}).ServerCertAdditionalNames...)
+	names = append(names, m.tlsServerSubjectAltNames().DNSNames...)
 	names = append(names, "localhost")
 	return names
+}
+
+// TLSServerIPAddresses are the additional IP addresses used by server TLS certificates.
+func (m *MariaDB) TLSServerIPAddresses() []string {
+	return m.tlsServerSubjectAltNames().IPAddresses
+}
+
+func (m *MariaDB) tlsServerSubjectAltNames() SubjectAltNames {
+	return ptr.Deref(ptr.Deref(m.Spec.TLS, TLS{}).ServerCertSubjectAltNames, SubjectAltNames{})
 }
 
 // TLSClientNames are the names used by client TLS certificates.

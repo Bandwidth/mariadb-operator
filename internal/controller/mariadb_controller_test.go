@@ -3,6 +3,8 @@ package controller
 import (
 	"os"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	mariadbv1alpha1 "github.com/mariadb-operator/mariadb-operator/v26/api/v1alpha1"
 	"github.com/mariadb-operator/mariadb-operator/v26/pkg/metadata"
 	stsobj "github.com/mariadb-operator/mariadb-operator/v26/pkg/statefulset"
@@ -80,6 +82,83 @@ temp-pool
 ignore_db_dirs = 'lost+found'
 default_time_zone = UTC
 `,
+		),
+	)
+})
+
+var _ = Describe("MariaDB TLS server certificate subject alternative names", func() {
+	DescribeTable("should issue the server certificate",
+		func(name string, sans *mariadbv1alpha1.SubjectAltNames, wantDNSNames []string, wantIPs []string) {
+			key := types.NamespacedName{
+				Name:      name,
+				Namespace: testNamespace,
+			}
+			mdb := mariadbv1alpha1.MariaDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      key.Name,
+					Namespace: key.Namespace,
+				},
+				Spec: mariadbv1alpha1.MariaDBSpec{
+					Storage: mariadbv1alpha1.Storage{
+						Size: ptr.To(resource.MustParse("300Mi")),
+					},
+					TLS: &mariadbv1alpha1.TLS{
+						Enabled: true,
+						ServerCertIssuerRef: &cmmeta.IssuerReference{
+							Name: "root-ca",
+							Kind: "ClusterIssuer",
+						},
+						ClientCertIssuerRef: &cmmeta.IssuerReference{
+							Name: "root-ca",
+							Kind: "ClusterIssuer",
+						},
+						ServerCertSubjectAltNames: sans,
+					},
+				},
+			}
+			applyMariadbTestConfig(&mdb)
+
+			By("Creating MariaDB")
+			Expect(k8sClient.Create(testCtx, &mdb)).To(Succeed())
+			DeferCleanup(func() {
+				deleteMariadb(key, false)
+			})
+
+			By("Expecting MariaDB to be ready eventually")
+			expectMariadbReady(testCtx, k8sClient, key)
+
+			By("Expecting server Certificate to have the expected names")
+			var cert certmanagerv1.Certificate
+			Expect(k8sClient.Get(testCtx, mdb.TLSServerCertSecretKey(), &cert)).To(Succeed())
+			Expect(cert.Spec.DNSNames).To(ContainElements(mdb.TLSServerDNSNames()))
+			Expect(cert.Spec.DNSNames).To(ContainElements(wantDNSNames))
+			if len(wantIPs) == 0 {
+				Expect(cert.Spec.IPAddresses).To(BeEmpty())
+			} else {
+				Expect(cert.Spec.IPAddresses).To(ConsistOf(wantIPs))
+			}
+		},
+		Entry("without serverCertSubjectAltNames",
+			"test-mariadb-tls-san-none",
+			nil,
+			nil,
+			nil,
+		),
+		Entry("with only dnsNames",
+			"test-mariadb-tls-san-dns",
+			&mariadbv1alpha1.SubjectAltNames{
+				DNSNames: []string{"mariadb.example.com"},
+			},
+			[]string{"mariadb.example.com"},
+			nil,
+		),
+		Entry("with only ipAddresses",
+			"test-mariadb-tls-san-ip",
+			&mariadbv1alpha1.SubjectAltNames{
+				IPAddresses: []string{"192.168.1.10"},
+			},
+			nil,
+			[]string{"192.168.1.10"},
 		),
 	)
 })

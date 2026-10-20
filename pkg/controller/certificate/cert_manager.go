@@ -55,6 +55,7 @@ func (r *CertReconciler) buildCertManagerCert(opts *CertReconcilerOpts, logger l
 		builder.WithKey(opts.certSecretKey),
 		builder.WithOwner(opts.relatedObject),
 		builder.WithDNSnames(opts.certDNSNames),
+		builder.WithIPAddresses(opts.certIPAddresses),
 		builder.WithLifetime(opts.certLifetime),
 		builder.WithUsages(certManagerKeyUsages(opts, logger)...),
 		builder.WithIssuerRef(*opts.certIssuerRef),
@@ -82,6 +83,7 @@ func (r *CertReconciler) reconcileCertManagerDesiredCert(ctx context.Context, op
 	patch := client.MergeFrom(existingCert.DeepCopy())
 	existingCert.Spec.Duration = desiredCert.Spec.Duration
 	existingCert.Spec.DNSNames = desiredCert.Spec.DNSNames
+	existingCert.Spec.IPAddresses = desiredCert.Spec.IPAddresses
 	existingCert.Spec.CommonName = desiredCert.Spec.CommonName
 	existingCert.Spec.Usages = desiredCert.Spec.Usages
 	existingCert.Spec.IssuerRef = desiredCert.Spec.IssuerRef

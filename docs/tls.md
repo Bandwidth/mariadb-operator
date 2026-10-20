@@ -285,6 +285,20 @@ spec:
       name: root-ca
       kind: ClusterIssuer
 ```
+
+To add extra Subject Alternative Names (DNS names and IP addresses) to the `MariaDB` server certificate, for example to connect through an external load balancer, use `serverCertSubjectAltNames`:
+
+```yaml
+spec:
+  tls:
+    enabled: true
+    serverCertSubjectAltNames:
+      dnsNames:
+        - mariadb.example.com
+      ipAddresses:
+        - 192.168.0.10
+```
+
 ```yaml
 apiVersion: k8s.mariadb.com/v1alpha1
 kind: MaxScale

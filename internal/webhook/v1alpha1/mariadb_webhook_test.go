@@ -588,6 +588,75 @@ var _ = Describe("v1alpha1.MariaDB webhook", func() {
 				false,
 			),
 			Entry(
+				"Valid TLS without serverCertSubjectAltNames",
+				&v1alpha1.MariaDB{
+					ObjectMeta: meta,
+					Spec: v1alpha1.MariaDBSpec{
+						Storage: v1alpha1.Storage{
+							Size: ptr.To(resource.MustParse("100Mi")),
+						},
+						TLS: &v1alpha1.TLS{
+							Enabled: true,
+						},
+					},
+				},
+				false,
+			),
+			Entry(
+				"Valid TLS with serverCertSubjectAltNames only dnsNames",
+				&v1alpha1.MariaDB{
+					ObjectMeta: meta,
+					Spec: v1alpha1.MariaDBSpec{
+						Storage: v1alpha1.Storage{
+							Size: ptr.To(resource.MustParse("100Mi")),
+						},
+						TLS: &v1alpha1.TLS{
+							Enabled: true,
+							ServerCertSubjectAltNames: &v1alpha1.SubjectAltNames{
+								DNSNames: []string{"mariadb.example.com"},
+							},
+						},
+					},
+				},
+				false,
+			),
+			Entry(
+				"Valid TLS with serverCertSubjectAltNames only ipAddresses",
+				&v1alpha1.MariaDB{
+					ObjectMeta: meta,
+					Spec: v1alpha1.MariaDBSpec{
+						Storage: v1alpha1.Storage{
+							Size: ptr.To(resource.MustParse("100Mi")),
+						},
+						TLS: &v1alpha1.TLS{
+							Enabled: true,
+							ServerCertSubjectAltNames: &v1alpha1.SubjectAltNames{
+								IPAddresses: []string{"192.168.1.10", "2001:db8::1"},
+							},
+						},
+					},
+				},
+				false,
+			),
+			Entry(
+				"Invalid TLS with serverCertSubjectAltNames invalid ipAddresses",
+				&v1alpha1.MariaDB{
+					ObjectMeta: meta,
+					Spec: v1alpha1.MariaDBSpec{
+						Storage: v1alpha1.Storage{
+							Size: ptr.To(resource.MustParse("100Mi")),
+						},
+						TLS: &v1alpha1.TLS{
+							Enabled: true,
+							ServerCertSubjectAltNames: &v1alpha1.SubjectAltNames{
+								IPAddresses: []string{"192.168.1.10", "not-an-ip"},
+							},
+						},
+					},
+				},
+				true,
+			),
+			Entry(
 				"Valid multi-cluster disabled",
 				&v1alpha1.MariaDB{
 					ObjectMeta: meta,
