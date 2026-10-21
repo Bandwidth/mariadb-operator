@@ -2451,6 +2451,70 @@ var _ = Describe("MariaDB types", func() {
 		)
 	})
 
+	Describe("TLS server certificate subject alternative names", func() {
+		DescribeTable("should build the server certificate names",
+			func(tls *TLS, wantExtraDNSNames []string, wantIPs []string) {
+				baseNames := (&MariaDB{ObjectMeta: objMeta}).TLSServerDNSNames()
+				mdb := &MariaDB{ObjectMeta: objMeta, Spec: MariaDBSpec{TLS: tls}}
+
+				names := mdb.TLSServerDNSNames()
+				Expect(names).To(ContainElements(baseNames))
+				Expect(names).To(HaveLen(len(baseNames) + len(wantExtraDNSNames)))
+				Expect(names).To(ContainElements(wantExtraDNSNames))
+
+				if len(wantIPs) == 0 {
+					Expect(mdb.TLSServerIPAddresses()).To(BeEmpty())
+				} else {
+					Expect(mdb.TLSServerIPAddresses()).To(Equal(wantIPs))
+				}
+			},
+			Entry("no TLS", nil, nil, nil),
+			Entry("TLS without serverCertSubjectAltNames", &TLS{Enabled: true}, nil, nil),
+			Entry("empty serverCertSubjectAltNames",
+				&TLS{Enabled: true, ServerCertSubjectAltNames: &SubjectAltNames{}}, nil, nil),
+			Entry("only dnsNames",
+				&TLS{
+					Enabled: true,
+					ServerCertSubjectAltNames: &SubjectAltNames{
+						DNSNames: []string{"mariadb.example.com", "mariadb.other.example.com"},
+					},
+				},
+				[]string{"mariadb.example.com", "mariadb.other.example.com"},
+				nil,
+			),
+			Entry("only ipAddresses",
+				&TLS{
+					Enabled: true,
+					ServerCertSubjectAltNames: &SubjectAltNames{
+						IPAddresses: []string{"192.168.1.10"},
+					},
+				},
+				nil,
+				[]string{"192.168.1.10"},
+			),
+			Entry("dnsNames and ipAddresses",
+				&TLS{
+					Enabled: true,
+					ServerCertSubjectAltNames: &SubjectAltNames{
+						DNSNames:    []string{"mariadb.example.com"},
+						IPAddresses: []string{"192.168.1.10"},
+					},
+				},
+				[]string{"mariadb.example.com"},
+				[]string{"192.168.1.10"},
+			),
+			Entry("serverCertAdditionalNames and serverCertSubjectAltNames",
+				&TLS{
+					Enabled:                   true,
+					ServerCertAdditionalNames: []string{"legacy.example.com"},
+					ServerCertSubjectAltNames: &SubjectAltNames{DNSNames: []string{"mariadb.example.com"}},
+				},
+				[]string{"legacy.example.com", "mariadb.example.com"},
+				nil,
+			),
+		)
+	})
+
 	Describe("IsSemiSyncEnabled", func() {
 		DescribeTable("should determine whether semi-sync is enabled",
 			func(mdb *MariaDB, expected bool) {

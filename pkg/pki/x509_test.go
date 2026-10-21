@@ -646,6 +646,79 @@ func TestValidateLifetime(t *testing.T) {
 	}
 }
 
+func TestCreateCertIPAddresses(t *testing.T) {
+	caKeyPair, err := CreateCA(WithCommonName("test-ca"))
+	if err != nil {
+		t.Fatalf("CA cert creation should succeed. Got error: %v", err)
+	}
+
+	tests := []struct {
+		name         string
+		x509Opts     []X509Opt
+		wantDNSNames []string
+		wantIPs      []string
+	}{
+		{
+			name: "No IP addresses",
+			x509Opts: []X509Opt{
+				WithCommonName("no-ips"),
+				WithDNSNames("no-ips"),
+			},
+			wantDNSNames: []string{"no-ips"},
+			wantIPs:      nil,
+		},
+		{
+			name: "Only IP addresses",
+			x509Opts: []X509Opt{
+				WithCommonName("only-ips"),
+				WithDNSNames("only-ips"),
+				WithIPAddresses("192.168.117.19", "2001:db8::1"),
+			},
+			wantDNSNames: []string{"only-ips"},
+			wantIPs:      []string{"192.168.117.19", "2001:db8::1"},
+		},
+		{
+			name: "Invalid IP addresses are ignored",
+			x509Opts: []X509Opt{
+				WithCommonName("invalid-ips"),
+				WithDNSNames("invalid-ips"),
+				WithIPAddresses("not-an-ip", "10.0.0.1"),
+			},
+			wantDNSNames: []string{"invalid-ips"},
+			wantIPs:      []string{"10.0.0.1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			keyPair, err := CreateCert(caKeyPair, tt.x509Opts...)
+			if err != nil {
+				t.Fatalf("Expecting error to be nil when creating cert. Got: %v", err)
+			}
+			cert, err := keyPair.LeafCertificate()
+			if err != nil {
+				t.Fatalf("error getting leaf certificate: %v", err)
+			}
+
+			if !reflect.DeepEqual(cert.DNSNames, tt.wantDNSNames) {
+				t.Errorf("unexpected DNS names, got: %v, want: %v", cert.DNSNames, tt.wantDNSNames)
+			}
+			var gotIPs []string
+			for _, ip := range cert.IPAddresses {
+				gotIPs = append(gotIPs, ip.String())
+			}
+			if !reflect.DeepEqual(gotIPs, tt.wantIPs) {
+				t.Errorf("unexpected IP addresses, got: %v, want: %v", gotIPs, tt.wantIPs)
+			}
+			for _, wantIP := range tt.wantIPs {
+				if err := cert.VerifyHostname(wantIP); err != nil {
+					t.Errorf("expecting cert to be valid for IP '%s': %v", wantIP, err)
+				}
+			}
+		})
+	}
+}
+
 type testCaseCreateCert struct {
 	name            string
 	x509Opts        []X509Opt

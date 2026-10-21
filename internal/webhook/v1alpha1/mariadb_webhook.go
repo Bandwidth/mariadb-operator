@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"reflect"
 
 	"github.com/mariadb-operator/mariadb-operator/v26/api/v1alpha1"
@@ -305,6 +306,22 @@ func validateTLS(mariadb *v1alpha1.MariaDB) error {
 	for _, item := range validationItems {
 		if err := validateTLSCert(&item); err != nil {
 			return err
+		}
+	}
+	return validateServerCertSubjectAltNames(tls.ServerCertSubjectAltNames)
+}
+
+func validateServerCertSubjectAltNames(sans *v1alpha1.SubjectAltNames) error {
+	if sans == nil {
+		return nil
+	}
+	for i, ip := range sans.IPAddresses {
+		if net.ParseIP(ip) == nil {
+			return field.Invalid(
+				field.NewPath("spec").Child("tls").Child("serverCertSubjectAltNames").Child("ipAddresses").Index(i),
+				ip,
+				"must be a valid IP address",
+			)
 		}
 	}
 	return nil

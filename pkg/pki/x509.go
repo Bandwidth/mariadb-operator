@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"time"
 )
 
@@ -28,6 +29,8 @@ type X509Opts struct {
 	CommonName string
 	// DNSNames is a list of DNS names for the certificate.
 	DNSNames []string
+	// IPAddresses is a list of IP addresses for the certificate.
+	IPAddresses []string
 	// NotBefore is the start time for the certificate's validity period.
 	NotBefore time.Time
 	// NotAfter is the end time for the certificate's validity period.
@@ -56,6 +59,13 @@ func WithCommonName(name string) X509Opt {
 func WithDNSNames(dnsNames ...string) X509Opt {
 	return func(x *X509Opts) {
 		x.DNSNames = dnsNames
+	}
+}
+
+// WithIPAddresses sets the IP addresses for the certificate. Invalid addresses are ignored.
+func WithIPAddresses(ipAddresses ...string) X509Opt {
+	return func(x *X509Opts) {
+		x.IPAddresses = ipAddresses
 	}
 }
 
@@ -168,6 +178,7 @@ func CreateCert(caKeyPair *KeyPair, x509Opts ...X509Opt) (*KeyPair, error) {
 			CommonName: opts.CommonName,
 		},
 		DNSNames:              opts.DNSNames,
+		IPAddresses:           parseIPs(opts.IPAddresses),
 		NotBefore:             opts.NotBefore,
 		NotAfter:              opts.NotAfter,
 		KeyUsage:              opts.KeyUsage,
@@ -329,4 +340,14 @@ func getSerialNumber() (*big.Int, error) {
 		return nil, err
 	}
 	return serialNumber, nil
+}
+
+func parseIPs(ipAddresses []string) []net.IP {
+	var ips []net.IP
+	for _, s := range ipAddresses {
+		if ip := net.ParseIP(s); ip != nil {
+			ips = append(ips, ip)
+		}
+	}
+	return ips
 }

@@ -1903,6 +1903,22 @@ spec:
                         default: ""
                         type: string
                     type: object
+                  serverCertSubjectAltNames:
+                    description: ServerCertSubjectAltNames are additional Subject
+                      Alternative Names (DNS names and IP addresses) added to the
+                      server certificate.
+                    properties:
+                      dnsNames:
+                        description: DNSNames is a list of additional DNS names.
+                        items:
+                          type: string
+                        type: array
+                      ipAddresses:
+                        description: IPAddresses is a list of additional IP addresses.
+                        items:
+                          type: string
+                        type: array
+                    type: object
                 type: object
               username:
                 description: Username is the username to connect to the external MariaDB.
@@ -8492,6 +8508,22 @@ spec:
                       name:
                         default: ""
                         type: string
+                    type: object
+                  serverCertSubjectAltNames:
+                    description: ServerCertSubjectAltNames are additional Subject
+                      Alternative Names (DNS names and IP addresses) added to the
+                      server certificate.
+                    properties:
+                      dnsNames:
+                        description: DNSNames is a list of additional DNS names.
+                        items:
+                          type: string
+                        type: array
+                      ipAddresses:
+                        description: IPAddresses is a list of additional IP addresses.
+                        items:
+                          type: string
+                        type: array
                     type: object
                 type: object
               tolerations:

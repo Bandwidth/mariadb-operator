@@ -807,6 +807,7 @@ _Appears in:_
 | `clientCertIssuerRef` _[IssuerReference](#issuerreference)_ | ClientCertIssuerRef is a reference to a cert-manager issuer object used to issue the client certificate. cert-manager must be installed previously in the cluster.<br />It is mutually exclusive with clientCertSecretRef.<br />By default, the Secret field 'ca.crt' provisioned by cert-manager will be added to the trust chain. A custom trust bundle may be specified via clientCASecretRef. |  |  |
 | `galeraSSTEnabled` _boolean_ | GaleraSSTEnabled determines whether Galera SST connections should use TLS.<br />It disabled by default. |  |  |
 | `serverCertAdditionalNames` _string array_ | ServerCertAdditionalNames is a list of additional certificate common names |  |  |
+| `serverCertSubjectAltNames` _[SubjectAltNames](#subjectaltnames)_ | ServerCertSubjectAltNames are additional Subject Alternative Names (DNS names and IP addresses) added to the server certificate. |  |  |
 | `mutual` _boolean_ | Mutual specifies whether TLS must be mutual between server and client for external connections.<br />When set to false, the client certificate will not be sent during the TLS handshake.<br />It is enabled by default. |  |  |
 
 
@@ -3337,6 +3338,24 @@ _Appears in:_
 | `persistentVolumeClaim` _[PersistentVolumeClaimVolumeSource](#persistentvolumeclaimvolumesource)_ |  |  |  |
 
 
+#### SubjectAltNames
+
+
+
+SubjectAltNames are additional Subject Alternative Names for a certificate.
+
+
+
+_Appears in:_
+- [ExternalTLS](#externaltls)
+- [TLS](#tls)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `dnsNames` _string array_ | DNSNames is a list of additional DNS names. |  |  |
+| `ipAddresses` _string array_ | IPAddresses is a list of additional IP addresses. |  |  |
+
+
 #### SuspendTemplate
 
 
@@ -3399,6 +3418,7 @@ _Appears in:_
 | `clientCertIssuerRef` _[IssuerReference](#issuerreference)_ | ClientCertIssuerRef is a reference to a cert-manager issuer object used to issue the client certificate. cert-manager must be installed previously in the cluster.<br />It is mutually exclusive with clientCertSecretRef.<br />By default, the Secret field 'ca.crt' provisioned by cert-manager will be added to the trust chain. A custom trust bundle may be specified via clientCASecretRef. |  |  |
 | `galeraSSTEnabled` _boolean_ | GaleraSSTEnabled determines whether Galera SST connections should use TLS.<br />It disabled by default. |  |  |
 | `serverCertAdditionalNames` _string array_ | ServerCertAdditionalNames is a list of additional certificate common names |  |  |
+| `serverCertSubjectAltNames` _[SubjectAltNames](#subjectaltnames)_ | ServerCertSubjectAltNames are additional Subject Alternative Names (DNS names and IP addresses) added to the server certificate. |  |  |
 
 
 #### TLSConfig
