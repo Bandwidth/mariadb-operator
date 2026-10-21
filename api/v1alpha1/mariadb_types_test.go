@@ -2718,6 +2718,50 @@ var _ = Describe("MariaDB types", func() {
 			Entry("manual offset wins over status", newExternalReplMariaDB(ptr.To(30), ptr.To(150)), ptr.To(30)),
 			Entry("discovered status offset when no manual offset", newExternalReplMariaDB(nil, ptr.To(150)), ptr.To(150)),
 			Entry("nil when neither manual nor status offset", newExternalReplMariaDB(nil, nil), nil),
+	Describe("IsServiceMonitorEnabled", func() {
+		DescribeTable("should determine whether the ServiceMonitor is enabled",
+			func(mdb *MariaDB, expected bool) {
+				Expect(mdb.IsServiceMonitorEnabled()).To(Equal(expected))
+			},
+			Entry("no metrics", &MariaDB{}, false),
+			Entry(
+				"metrics disabled",
+				&MariaDB{
+					Spec: MariaDBSpec{
+						Metrics: &MariadbMetrics{
+							ServiceMonitor: ServiceMonitor{
+								Enabled: ptr.To(true),
+							},
+						},
+					},
+				},
+				false,
+			),
+			Entry(
+				"metrics enabled, ServiceMonitor unset",
+				&MariaDB{
+					Spec: MariaDBSpec{
+						Metrics: &MariadbMetrics{
+							Enabled: true,
+						},
+					},
+				},
+				true,
+			),
+			Entry(
+				"metrics enabled, ServiceMonitor disabled",
+				&MariaDB{
+					Spec: MariaDBSpec{
+						Metrics: &MariadbMetrics{
+							Enabled: true,
+							ServiceMonitor: ServiceMonitor{
+								Enabled: ptr.To(false),
+							},
+						},
+					},
+				},
+				false,
+			),
 		)
 	})
 })
