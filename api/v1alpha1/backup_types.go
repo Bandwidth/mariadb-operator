@@ -134,9 +134,13 @@ func (b *Backup) IsComplete() bool {
 	return meta.IsStatusConditionTrue(b.Status.Conditions, ConditionTypeComplete)
 }
 
-func (b *Backup) IsFailed() bool {
-	condition := meta.FindStatusCondition(b.Status.Conditions, ConditionTypeComplete)
-	return condition != nil && condition.Status == metav1.ConditionTrue && condition.Reason == ConditionReasonJobFailed
+// IsSuccessful indicates whether the Backup has completed successfully.
+func (b *Backup) IsSuccessful() bool {
+	c := meta.FindStatusCondition(b.Status.Conditions, ConditionTypeComplete)
+	if c == nil {
+		return false
+	}
+	return c.Status == metav1.ConditionTrue && c.Reason == ConditionReasonJobComplete
 }
 
 func (b *Backup) Validate() error {
