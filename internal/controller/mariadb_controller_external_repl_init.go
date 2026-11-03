@@ -252,7 +252,7 @@ func (r *MariaDBReconciler) reconcileLogicalBackup(ctx context.Context, mariadb 
 		return ctrl.Result{RequeueAfter: time.Minute * 1}, nil
 	}
 
-	if existingBackup.IsFailed() {
+	if !existingBackup.IsSuccessful() {
 		logger.Info("Backup has failed, deleting and retrying")
 		if err := r.Delete(ctx, &existingBackup); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error deleting failed Backup: %v", err)

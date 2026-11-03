@@ -409,7 +409,7 @@ func (r *MariaDBReconciler) triggerMaxScaleSwitchover(ctx context.Context, maria
 
 func shouldTriggerSwitchover(mariadb *mariadbv1alpha1.MariaDB) bool {
 	replication := mariadb.Replication()
-	if mariadb.IsMaxScaleEnabled() || mariadb.IsRestoringBackup() || replication.IsExternalReplication() {
+	if mariadb.IsRestoringBackup() || replication.IsExternalReplication() {
 		return false
 	}
 	return mariadb.IsReplicationEnabled() && mariadb.HasConfiguredReplica()

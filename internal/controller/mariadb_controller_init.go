@@ -339,7 +339,7 @@ func (r *MariaDBReconciler) lastRestoredPodIndex(ctx context.Context, mariadb *m
 }
 
 func (r *MariaDBReconciler) reconcileAndWaitForInitJob(ctx context.Context, mariadb *mariadbv1alpha1.MariaDB,
-	key types.NamespacedName, podIndex int, logger logr.Logger, restoreOpts ...builder.PhysicalBackupRestoreOpt) (ctrl.Result, error) {
+	key types.NamespacedName, podIndex int, logger logr.Logger, restoreOpts ...builder.RestoreOpt) (ctrl.Result, error) {
 	var job batchv1.Job
 	if err := r.Get(ctx, key, &job); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -358,7 +358,7 @@ func (r *MariaDBReconciler) reconcileAndWaitForInitJob(ctx context.Context, mari
 }
 
 func (r *MariaDBReconciler) createInitJob(ctx context.Context, mariadb *mariadbv1alpha1.MariaDB,
-	key types.NamespacedName, podIndex int, restoreOpts ...builder.PhysicalBackupRestoreOpt) error {
+	key types.NamespacedName, podIndex int, restoreOpts ...builder.RestoreOpt) error {
 	job, err := r.Builder.BuildPhysicalBackupRestoreJob(
 		key,
 		mariadb,

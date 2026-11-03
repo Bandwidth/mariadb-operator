@@ -460,7 +460,7 @@ func (b *Builder) BuildRestoreJob(key types.NamespacedName, restore *mariadbv1al
 	return job, nil
 }
 
-type PhysicalBackupRestoreOpts struct {
+type RestoreOpts struct {
 	StartGtid                      *replication.Gtid
 	TargetRecoveryTime             *time.Time
 	TargetRecoveryTimeAgeThreshold *time.Time
@@ -475,17 +475,17 @@ type PhysicalBackupRestoreOpts struct {
 	LogLevel                       string
 }
 
-func WithStartGtid(gtid *replication.Gtid) PhysicalBackupRestoreOpt {
-	return func(opts *PhysicalBackupRestoreOpts) error {
+func WithStartGtid(gtid *replication.Gtid) RestoreOpt {
+	return func(opts *RestoreOpts) error {
 		opts.StartGtid = gtid
 		return nil
 	}
 }
 
-type PhysicalBackupRestoreOpt func(*PhysicalBackupRestoreOpts) error
+type RestoreOpt func(*RestoreOpts) error
 
-func WithBootstrapFrom(bootstrapFrom *mariadbv1alpha1.BootstrapFrom) PhysicalBackupRestoreOpt {
-	return func(opts *PhysicalBackupRestoreOpts) error {
+func WithBootstrapFrom(bootstrapFrom *mariadbv1alpha1.BootstrapFrom) RestoreOpt {
+	return func(opts *RestoreOpts) error {
 		opts.TargetRecoveryTime = ptr.To(bootstrapFrom.TargetRecoveryTimeOrDefault())
 		opts.Volume = bootstrapFrom.Volume
 		opts.S3 = bootstrapFrom.S3
@@ -497,8 +497,8 @@ func WithBootstrapFrom(bootstrapFrom *mariadbv1alpha1.BootstrapFrom) PhysicalBac
 }
 
 func WithPhysicalBackup(pb *mariadbv1alpha1.PhysicalBackup, targetRecoveryTime time.Time,
-	restoreJob *mariadbv1alpha1.Job, restoreCommandOpts ...command.MariaDBBackupRestoreOpt) PhysicalBackupRestoreOpt {
-	return func(opts *PhysicalBackupRestoreOpts) error {
+	restoreJob *mariadbv1alpha1.Job, restoreCommandOpts ...command.MariaDBBackupRestoreOpt) RestoreOpt {
+	return func(opts *RestoreOpts) error {
 		volume, err := pb.Volume()
 		if err != nil {
 			return err
@@ -513,8 +513,8 @@ func WithPhysicalBackup(pb *mariadbv1alpha1.PhysicalBackup, targetRecoveryTime t
 	}
 }
 
-func WithReplicaRecovery(podToRecover *corev1.Pod) PhysicalBackupRestoreOpt {
-	return func(opts *PhysicalBackupRestoreOpts) error {
+func WithReplicaRecovery(podToRecover *corev1.Pod) RestoreOpt {
+	return func(opts *RestoreOpts) error {
 		// By default, both MariaDB Pod and the init Job will have the same labels and affinity rules.
 		// MariaDB Pod will be running, removing the labels and affinity will allow the recovery Job to be scheduled.
 		opts.MariaDBLabels = ptr.To(false)
@@ -528,8 +528,8 @@ func WithReplicaRecovery(podToRecover *corev1.Pod) PhysicalBackupRestoreOpt {
 	}
 }
 
-func WithAgeThreshold(ageThreshold *time.Time) PhysicalBackupRestoreOpt {
-	return func(opts *PhysicalBackupRestoreOpts) error {
+func WithAgeThreshold(ageThreshold *time.Time) RestoreOpt {
+	return func(opts *RestoreOpts) error {
 		// By default, the restore job will be executed using just the target recovery time.
 		// If an age threshold is provided, the job will fail if the most recent backup time is too old.
 		opts.TargetRecoveryTimeAgeThreshold = ageThreshold
@@ -539,8 +539,8 @@ func WithAgeThreshold(ageThreshold *time.Time) PhysicalBackupRestoreOpt {
 }
 
 func (b *Builder) BuildPhysicalBackupRestoreJob(key types.NamespacedName, mariadb *mariadbv1alpha1.MariaDB,
-	podIndex *int, restoreOpts ...PhysicalBackupRestoreOpt) (*batchv1.Job, error) {
-	opts := PhysicalBackupRestoreOpts{}
+	podIndex *int, restoreOpts ...RestoreOpt) (*batchv1.Job, error) {
+	opts := RestoreOpts{}
 	for _, setOpt := range restoreOpts {
 		if err := setOpt(&opts); err != nil {
 			return nil, fmt.Errorf("error setting restore option: %v", err)
@@ -686,8 +686,8 @@ func (b *Builder) BuildPhysicalBackupRestoreJob(key types.NamespacedName, mariad
 }
 
 func (b *Builder) BuildPITRJob(key types.NamespacedName, pitr *mariadbv1alpha1.PointInTimeRecovery,
-	mariadb *mariadbv1alpha1.MariaDB, restoreOpts ...PhysicalBackupRestoreOpt) (*batchv1.Job, error) {
-	opts := PhysicalBackupRestoreOpts{}
+	mariadb *mariadbv1alpha1.MariaDB, restoreOpts ...RestoreOpt) (*batchv1.Job, error) {
+	opts := RestoreOpts{}
 	for _, setOpt := range restoreOpts {
 		if err := setOpt(&opts); err != nil {
 			return nil, fmt.Errorf("error setting restore option: %v", err)
