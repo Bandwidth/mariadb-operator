@@ -1970,7 +1970,7 @@ func TestBuildIncludedDatabasesQueryShellRoundTrip(t *testing.T) {
 	for _, name := range []string{"scratch", `o'brien`, `back\slash`, "with space", `dollar$HOME`} {
 		t.Run(name, func(t *testing.T) {
 			query := buildIncludedDatabasesQuery([]string{name})
-			out, err := exec.Command("bash", "-c", "printf '%s' "+shellSingleQuote(query)).Output()
+			out, err := exec.CommandContext(t.Context(), "bash", "-c", "printf '%s' "+shellSingleQuote(query)).Output()
 			assert.NoError(t, err)
 			assert.Equal(t, query, string(out))
 		})
