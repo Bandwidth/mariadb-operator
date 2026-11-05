@@ -256,3 +256,54 @@ func TestExternalReplTables(t *testing.T) {
 		})
 	}
 }
+
+func TestExternalReplDatabases(t *testing.T) {
+	tests := []struct {
+		name         string
+		env          PodEnvironment
+		wantFiltered []string
+		wantIgnored  []string
+	}{
+		{
+			name:         "not set",
+			env:          PodEnvironment{},
+			wantFiltered: nil,
+			wantIgnored:  nil,
+		},
+		{
+			name:         "filtered databases",
+			env:          PodEnvironment{MariaDBExternalReplFilteredDatabases: "lerg,lerg_a,lerg_b"},
+			wantFiltered: []string{"lerg", "lerg_a", "lerg_b"},
+			wantIgnored:  nil,
+		},
+		{
+			name:         "single filtered database",
+			env:          PodEnvironment{MariaDBExternalReplFilteredDatabases: "lerg"},
+			wantFiltered: []string{"lerg"},
+			wantIgnored:  nil,
+		},
+		{
+			name:         "ignored databases",
+			env:          PodEnvironment{MariaDBExternalReplIgnoredDatabases: "scratch,tmp"},
+			wantFiltered: nil,
+			wantIgnored:  []string{"scratch", "tmp"},
+		},
+		{
+			name:         "table lists do not leak into the database lists",
+			env:          PodEnvironment{MariaDBExternalReplFilteredTables: "db.t1", MariaDBExternalReplIgnoredTables: "db.t2"},
+			wantFiltered: nil,
+			wantIgnored:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if diff := cmp.Diff(tt.wantFiltered, tt.env.ExternalReplFilteredDatabases()); diff != "" {
+				t.Errorf("unexpected filtered databases (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantIgnored, tt.env.ExternalReplIgnoredDatabases()); diff != "" {
+				t.Errorf("unexpected ignored databases (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

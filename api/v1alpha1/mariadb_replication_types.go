@@ -218,6 +218,7 @@ type ReplicaReplication struct {
 
 // ReplicaFromExternal is the replication configuration from external servers.
 // +kubebuilder:validation:XValidation:rule="!(has(self.filteredReplicaTables) && size(self.filteredReplicaTables) > 0 && has(self.ignoredReplicaTables) && size(self.ignoredReplicaTables) > 0)",message="filteredReplicaTables and ignoredReplicaTables are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="[has(self.filteredReplicaTables) && size(self.filteredReplicaTables) > 0, has(self.ignoredReplicaTables) && size(self.ignoredReplicaTables) > 0, has(self.filteredReplicaDatabases) && size(self.filteredReplicaDatabases) > 0, has(self.ignoredReplicaDatabases) && size(self.ignoredReplicaDatabases) > 0].filter(x, x).size() <= 1",message="filteredReplicaTables, ignoredReplicaTables, filteredReplicaDatabases and ignoredReplicaDatabases are mutually exclusive"
 type ReplicaFromExternal struct {
 
 	// MariaDBRef is a reference to a MariaDB object.
@@ -264,6 +265,32 @@ type ReplicaFromExternal struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	IgnoredReplicaTables []string `json:"ignoredReplicaTables,omitempty" webhook:"inmutable"`
+	// FilteredReplicaDatabases is an optional list of databases to replicate.
+	// When set, the logical backup will only include these databases and the replication will be
+	// configured with replicate_do_db for each entry. New tables created in these databases are replicated automatically.
+	// It is mutually exclusive with the table lists and ignoredReplicaDatabases.
+	// The list is applied when the replicas are initialized from the logical backup, so it cannot be changed afterwards.
+	// With statement-based binary logging, replicate_do_db filters by the default database of each statement (USE),
+	// so statements that touch a database other than the default one may be filtered incorrectly. Row-based events are
+	// filtered by the real database of the table.
+	// GTID strict mode is automatically disabled when this field is set, as partial replication is incompatible with it.
+	// +optional
+	// +kubebuilder:validation:items:Pattern=`^[^,.]+$`
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	FilteredReplicaDatabases []string `json:"filteredReplicaDatabases,omitempty" webhook:"inmutable"`
+	// IgnoredReplicaDatabases is an optional list of databases to exclude from replication.
+	// When set, the logical backup will skip these databases and the replication will be
+	// configured with replicate_ignore_db for each entry. Every other database, including the ones created later, is replicated.
+	// It is mutually exclusive with the table lists and filteredReplicaDatabases.
+	// The list is applied when the replicas are initialized from the logical backup, so it cannot be changed afterwards.
+	// The same default-database caveat as filteredReplicaDatabases applies to statement-based binary logging.
+	// The mysql system schema is copied like in an unfiltered backup, so the definitions of the stored routines
+	// of an ignored database that MariaDB keeps in mysql.proc are copied too, although the database itself is not.
+	// GTID strict mode is automatically disabled when this field is set, as partial replication is incompatible with it.
+	// +optional
+	// +kubebuilder:validation:items:Pattern=`^[^,.]+$`
+	// +operator-sdk:csv:customresourcedefinitions:type=spec
+	IgnoredReplicaDatabases []string `json:"ignoredReplicaDatabases,omitempty" webhook:"inmutable"`
 }
 
 // HasFilteredTables returns true when at least one filtered table is defined.
@@ -274,6 +301,22 @@ func (r *ReplicaFromExternal) HasFilteredTables() bool {
 // HasIgnoredTables returns true when at least one ignored table is defined.
 func (r *ReplicaFromExternal) HasIgnoredTables() bool {
 	return len(r.IgnoredReplicaTables) > 0
+}
+
+// HasFilteredDatabases returns true when at least one filtered database is defined.
+func (r *ReplicaFromExternal) HasFilteredDatabases() bool {
+	return len(r.FilteredReplicaDatabases) > 0
+}
+
+// HasIgnoredDatabases returns true when at least one ignored database is defined.
+func (r *ReplicaFromExternal) HasIgnoredDatabases() bool {
+	return len(r.IgnoredReplicaDatabases) > 0
+}
+
+// HasReplicationFilter returns true when any table or database filter is defined, i.e. the replicas hold
+// a subset of the external MariaDB.
+func (r *ReplicaFromExternal) HasReplicationFilter() bool {
+	return r.HasFilteredTables() || r.HasIgnoredTables() || r.HasFilteredDatabases() || r.HasIgnoredDatabases()
 }
 
 // SetDefaults fills the current ReplicaReplication object with DefaultReplicationSpec.
@@ -509,8 +552,7 @@ func (r *Replication) SetDefaults(mdb *MariaDB, env *environment.OperatorEnv) er
 
 	if r.GtidStrictMode == nil {
 		// Partial replication is incompatible with GTID strict mode; disable it automatically.
-		if r.IsExternalReplication() &&
-			(r.ReplicaFromExternal.HasFilteredTables() || r.ReplicaFromExternal.HasIgnoredTables()) {
+		if r.IsExternalReplication() && r.ReplicaFromExternal.HasReplicationFilter() {
 			r.GtidStrictMode = ptr.To(false)
 		} else {
 			r.GtidStrictMode = ptr.To(true)
@@ -602,9 +644,9 @@ func (m *MariaDB) IsExternalReplInitialing() bool {
 func (m *MariaDB) ExternalReplLogicalBackupName() string {
 	ext := m.Replication().ReplicaFromExternal
 	emdbName := ext.MariaDBRef.Name
-	// A table selection makes the dump differ from the plain external MariaDB one, so it gets its own
+	// A table or database selection makes the dump differ from the plain external MariaDB one, so it gets its own
 	// Backup name to avoid reusing a stale unfiltered backup.
-	if !ext.HasFilteredTables() && !ext.HasIgnoredTables() {
+	if !ext.HasReplicationFilter() {
 		return emdbName
 	}
 

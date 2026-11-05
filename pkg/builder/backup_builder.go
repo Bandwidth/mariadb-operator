@@ -19,8 +19,10 @@ type BackupOpts struct {
 	Storage     mariadbv1alpha1.BackupStorage
 	Args        []string
 	Tables      []string
-	Resources   mariadbv1alpha1.ResourceRequirements
-	Affinity    mariadbv1alpha1.AffinityConfig
+	// Databases overrides the Databases of the Template only when set, so a Template selecting databases keeps working.
+	Databases []string
+	Resources mariadbv1alpha1.ResourceRequirements
+	Affinity  mariadbv1alpha1.AffinityConfig
 	// MaxRetention metav1.Duration
 	MaxRetention     time.Duration
 	ImagePullSecrets []mariadbv1alpha1.LocalObjectReference
@@ -47,6 +49,9 @@ func (b *Builder) BuildBackup(opts BackupOpts, owner metav1.Object) (*mariadbv1a
 	spec.MariaDBRef = opts.MariaDBRef
 	spec.Compression = opts.Compression
 	spec.Tables = opts.Tables
+	if len(opts.Databases) > 0 {
+		spec.Databases = opts.Databases
+	}
 	spec.MaxRetention = metav1.Duration{Duration: opts.MaxRetention}
 	spec.Args = opts.Args
 	// The operator-managed Backup runs as a one-shot Job. A suspended Schedule on the template is what

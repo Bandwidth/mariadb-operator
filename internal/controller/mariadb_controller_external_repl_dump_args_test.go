@@ -16,9 +16,10 @@ func TestExternalReplDumpArgs(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		ignoredTables []string
-		want          []string
+		name             string
+		ignoredTables    []string
+		ignoredDatabases []string
+		want             []string
 	}{
 		{
 			name:          "no ignored tables",
@@ -35,11 +36,22 @@ func TestExternalReplDumpArgs(t *testing.T) {
 			ignoredTables: []string{"db1.t1", "db2.t2"},
 			want:          append(append([]string{}, baseArgs...), "--ignore-table=db1.t1", "--ignore-table=db2.t2"),
 		},
+		{
+			name:             "one ignored database",
+			ignoredDatabases: []string{"db1"},
+			want:             append(append([]string{}, baseArgs...), "--operator-exclude-database=db1"),
+		},
+		{
+			name:             "multiple ignored databases",
+			ignoredDatabases: []string{"db1", "db2"},
+			want: append(append([]string{}, baseArgs...),
+				"--operator-exclude-database=db1", "--operator-exclude-database=db2"),
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if diff := cmp.Diff(tt.want, externalReplDumpArgs(tt.ignoredTables)); diff != "" {
+			if diff := cmp.Diff(tt.want, externalReplDumpArgs(tt.ignoredTables, tt.ignoredDatabases)); diff != "" {
 				t.Errorf("unexpected dump args (-want +got):\n%s", diff)
 			}
 		})

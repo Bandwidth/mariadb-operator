@@ -2,6 +2,8 @@ package command
 
 import (
 	"fmt"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -449,6 +451,65 @@ func TestMariadbDumpArgs(t *testing.T) {
 				"--databases",
 				"schema1",
 				"schema2",
+			},
+		},
+		{
+			name:      "filtered databases",
+			backupCmd: &BackupCommand{},
+			backup: &mariadbv1alpha1.Backup{
+				Spec: mariadbv1alpha1.BackupSpec{
+					Databases: []string{"lerg", "lerg_a", "lerg_b"},
+				},
+			},
+			mariadb: &mariadbv1alpha1.MariaDB{},
+			wantArgs: []string{
+				"--single-transaction",
+				"--events",
+				"--routines",
+				"--databases lerg lerg_a lerg_b",
+			},
+		},
+		{
+			name: "excluded databases",
+			backupCmd: &BackupCommand{
+				BackupOpts{
+					ExtraOpts: []string{
+						"--verbose",
+						"--operator-exclude-database=scratch",
+						"--operator-exclude-database=tmp",
+					},
+				},
+			},
+			backup:  &mariadbv1alpha1.Backup{},
+			mariadb: &mariadbv1alpha1.MariaDB{},
+			// The databases to dump are resolved at runtime: neither --all-databases nor the exclusions are passed.
+			wantArgs: []string{
+				"--single-transaction",
+				"--events",
+				"--routines",
+				"--verbose",
+			},
+		},
+		{
+			name: "excluded databases are never forwarded when databases are selected",
+			backupCmd: &BackupCommand{
+				BackupOpts{
+					ExtraOpts: []string{
+						"--operator-exclude-database=scratch",
+					},
+				},
+			},
+			backup: &mariadbv1alpha1.Backup{
+				Spec: mariadbv1alpha1.BackupSpec{
+					Databases: []string{"db1"},
+				},
+			},
+			mariadb: &mariadbv1alpha1.MariaDB{},
+			wantArgs: []string{
+				"--single-transaction",
+				"--events",
+				"--routines",
+				"--databases db1",
 			},
 		},
 	}
@@ -1753,4 +1814,165 @@ func mustParseGtid(t *testing.T, rawGtid string) *replication.Gtid {
 		t.Fatalf("unexpected error parsing GTID: %v", err)
 	}
 	return gtid
+}
+
+func TestMariadbDumpExcludedDatabases(t *testing.T) {
+	newBackupCmd := func(extraOpts ...string) *BackupCommand {
+		return &BackupCommand{
+			BackupOpts{
+				CommandOpts: CommandOpts{
+					UserEnv:     "MARIADB_USER",
+					PasswordEnv: "MARIADB_PASSWORD",
+				},
+				Path:           "/backup",
+				TargetFilePath: "/backup/0-backup-target.txt",
+				ExtraOpts:      extraOpts,
+			},
+		}
+	}
+
+	tests := []struct {
+		name         string
+		backupCmd    *BackupCommand
+		backup       *mariadbv1alpha1.Backup
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name:      "excluded databases are resolved at runtime",
+			backupCmd: newBackupCmd("--verbose", "--operator-exclude-database=scratch", "--operator-exclude-database=tmp"),
+			backup:    &mariadbv1alpha1.Backup{},
+			wantContains: []string{
+				`mapfile -t MARIADB_DB_ARGS < <(mariadb `,
+				"-BNe " + shellSingleQuote(buildIncludedDatabasesQuery([]string{"scratch", "tmp"})),
+				`no databases left to dump`,
+				`--databases "${MARIADB_DB_ARGS[@]}"`,
+				"--verbose",
+			},
+			wantAbsent: []string{"--all-databases", "operator-exclude-database"},
+		},
+		{
+			name:      "no exclusion keeps --all-databases",
+			backupCmd: newBackupCmd("--verbose"),
+			backup:    &mariadbv1alpha1.Backup{},
+			wantContains: []string{
+				"--all-databases",
+			},
+			wantAbsent: []string{"MARIADB_DB_ARGS"},
+		},
+		{
+			name:      "selected databases win over the exclusion",
+			backupCmd: newBackupCmd("--operator-exclude-database=scratch"),
+			backup: &mariadbv1alpha1.Backup{
+				Spec: mariadbv1alpha1.BackupSpec{
+					Databases: []string{"db1"},
+				},
+			},
+			wantContains: []string{
+				"--databases db1",
+			},
+			wantAbsent: []string{"MARIADB_DB_ARGS", "--all-databases", "operator-exclude-database"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd, err := tt.backupCmd.MariadbDump(tt.backup, &mariadbv1alpha1.MariaDB{})
+			assert.NoError(t, err)
+			script := cmd.Args[0]
+			for _, want := range tt.wantContains {
+				assert.Contains(t, script, want)
+			}
+			for _, absent := range tt.wantAbsent {
+				assert.NotContains(t, script, absent)
+			}
+		})
+	}
+}
+
+func TestMariadbDumpExcludedDatabasesTLS(t *testing.T) {
+	backupCmd := &BackupCommand{
+		BackupOpts{
+			CommandOpts: CommandOpts{
+				UserEnv:     "MARIADB_USER",
+				PasswordEnv: "MARIADB_PASSWORD",
+			},
+			Path:           "/backup",
+			TargetFilePath: "/backup/0-backup-target.txt",
+			ExtraOpts:      []string{"--operator-exclude-database=scratch"},
+		},
+	}
+	mariadb := &mariadbv1alpha1.MariaDB{
+		Spec: mariadbv1alpha1.MariaDBSpec{
+			TLS: &mariadbv1alpha1.TLS{
+				Enabled: true,
+			},
+		},
+	}
+
+	cmd, err := backupCmd.MariadbDump(&mariadbv1alpha1.Backup{}, mariadb)
+	assert.NoError(t, err)
+
+	// The database list query must use TLS like the dump, otherwise it fails against a server that requires TLS.
+	tlsFlags := fmt.Sprintf("--ssl --ssl-ca %s --ssl-cert %s --ssl-key %s --ssl-verify-server-cert",
+		builderpki.CACertPath, builderpki.ClientCertPath, builderpki.ClientKeyPath)
+	var queryLine string
+	for _, line := range strings.Split(cmd.Args[0], ";") {
+		if strings.HasPrefix(line, "mapfile -t MARIADB_DB_ARGS") {
+			queryLine = line
+		}
+	}
+	assert.Contains(t, queryLine, tlsFlags)
+}
+
+func TestBuildIncludedDatabasesQuery(t *testing.T) {
+	tests := []struct {
+		name     string
+		excluded []string
+		want     string
+	}{
+		{
+			name:     "plain names",
+			excluded: []string{"scratch"},
+			want: "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA " +
+				"WHERE SCHEMA_NAME NOT IN ('information_schema','performance_schema','scratch') ORDER BY SCHEMA_NAME",
+		},
+		{
+			name:     "quote and backslash are escaped",
+			excluded: []string{`o'brien`, `back\slash`},
+			want: "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA " +
+				`WHERE SCHEMA_NAME NOT IN ('information_schema','performance_schema','o''brien','back\\slash') ORDER BY SCHEMA_NAME`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, buildIncludedDatabasesQuery(tt.excluded))
+		})
+	}
+}
+
+func TestSplitExcludedDatabases(t *testing.T) {
+	excluded, rest := splitExcludedDatabases([]string{
+		"--verbose",
+		"--operator-exclude-database=scratch",
+		`--operator-exclude-database='tmp'`,
+		"--add-drop-table",
+	})
+	assert.Equal(t, []string{"scratch", "tmp"}, excluded)
+	assert.Equal(t, []string{"--verbose", "--add-drop-table"}, rest)
+
+	excluded, rest = splitExcludedDatabases(nil)
+	assert.Empty(t, excluded)
+	assert.Empty(t, rest)
+}
+
+func TestBuildIncludedDatabasesQueryShellRoundTrip(t *testing.T) {
+	for _, name := range []string{"scratch", `o'brien`, `back\slash`, "with space", `dollar$HOME`} {
+		t.Run(name, func(t *testing.T) {
+			query := buildIncludedDatabasesQuery([]string{name})
+			out, err := exec.Command("bash", "-c", "printf '%s' "+shellSingleQuote(query)).Output()
+			assert.NoError(t, err)
+			assert.Equal(t, query, string(out))
+		})
+	}
 }
