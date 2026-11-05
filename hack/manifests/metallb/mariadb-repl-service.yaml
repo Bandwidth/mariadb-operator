@@ -502,3 +502,115 @@ spec:
     statefulset.kubernetes.io/pod-name: mariadb-repl-ext-ignored-1
   publishNotReadyAddresses: true
   type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-repl-ext-filtered-dbs-0-lb
+  namespace: default
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: $CIDR_PREFIX.1.33
+spec:
+  ports:
+  - name: mariadb
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: agent
+    port: 5555
+    protocol: TCP
+    targetPort: 5555
+  - name: agent-probe
+    port: 5566
+    protocol: TCP
+    targetPort: 5566
+  selector:
+    app.kubernetes.io/instance: mariadb-repl-ext-filtered-dbs
+    app.kubernetes.io/name: mariadb
+    statefulset.kubernetes.io/pod-name: mariadb-repl-ext-filtered-dbs-0
+  publishNotReadyAddresses: true
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-repl-ext-filtered-dbs-1-lb
+  namespace: default
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: $CIDR_PREFIX.1.34
+spec:
+  ports:
+  - name: mariadb
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: agent
+    port: 5555
+    protocol: TCP
+    targetPort: 5555
+  - name: agent-probe
+    port: 5566
+    protocol: TCP
+    targetPort: 5566
+  selector:
+    app.kubernetes.io/instance: mariadb-repl-ext-filtered-dbs
+    app.kubernetes.io/name: mariadb
+    statefulset.kubernetes.io/pod-name: mariadb-repl-ext-filtered-dbs-1
+  publishNotReadyAddresses: true
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-repl-ext-ignored-dbs-0-lb
+  namespace: default
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: $CIDR_PREFIX.1.38
+spec:
+  ports:
+  - name: mariadb
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: agent
+    port: 5555
+    protocol: TCP
+    targetPort: 5555
+  - name: agent-probe
+    port: 5566
+    protocol: TCP
+    targetPort: 5566
+  selector:
+    app.kubernetes.io/instance: mariadb-repl-ext-ignored-dbs
+    app.kubernetes.io/name: mariadb
+    statefulset.kubernetes.io/pod-name: mariadb-repl-ext-ignored-dbs-0
+  publishNotReadyAddresses: true
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-repl-ext-ignored-dbs-1-lb
+  namespace: default
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: $CIDR_PREFIX.1.39
+spec:
+  ports:
+  - name: mariadb
+    port: 3306
+    protocol: TCP
+    targetPort: 3306
+  - name: agent
+    port: 5555
+    protocol: TCP
+    targetPort: 5555
+  - name: agent-probe
+    port: 5566
+    protocol: TCP
+    targetPort: 5566
+  selector:
+    app.kubernetes.io/instance: mariadb-repl-ext-ignored-dbs
+    app.kubernetes.io/name: mariadb
+    statefulset.kubernetes.io/pod-name: mariadb-repl-ext-ignored-dbs-1
+  publishNotReadyAddresses: true
+  type: LoadBalancer
