@@ -5443,6 +5443,21 @@ spec:
                         description: ConnectionTimeout to be used when the replica
                           connects to the primary.
                         type: string
+                      filteredReplicaDatabases:
+                        description: |-
+                          FilteredReplicaDatabases is an optional list of databases to replicate.
+                          When set, the logical backup will only include these databases and the replication will be
+                          configured with replicate_do_db for each entry. New tables created in these databases are replicated automatically.
+                          It is mutually exclusive with the table lists and ignoredReplicaDatabases.
+                          The list is applied when the replicas are initialized from the logical backup, so it cannot be changed afterwards.
+                          With statement-based binary logging, replicate_do_db filters by the default database of each statement (USE),
+                          so statements that touch a database other than the default one may be filtered incorrectly. Row-based events are
+                          filtered by the real database of the table.
+                          GTID strict mode is automatically disabled when this field is set, as partial replication is incompatible with it.
+                        items:
+                          pattern: ^[^,.]+$
+                          type: string
+                        type: array
                       filteredReplicaTables:
                         description: |-
                           FilteredReplicaTables is an optional list of tables in "database.table" format to replicate.
@@ -5464,6 +5479,21 @@ spec:
                         description: HealthCheckInterval to be used when the replica
                           connects to the primary.
                         type: string
+                      ignoredReplicaDatabases:
+                        description: |-
+                          IgnoredReplicaDatabases is an optional list of databases to exclude from replication.
+                          When set, the logical backup will skip these databases and the replication will be
+                          configured with replicate_ignore_db for each entry. Every other database, including the ones created later, is replicated.
+                          It is mutually exclusive with the table lists and filteredReplicaDatabases.
+                          The list is applied when the replicas are initialized from the logical backup, so it cannot be changed afterwards.
+                          The same default-database caveat as filteredReplicaDatabases applies to statement-based binary logging.
+                          The mysql system schema is copied like in an unfiltered backup, so the definitions of the stored routines
+                          of an ignored database that MariaDB keeps in mysql.proc are copied too, although the database itself is not.
+                          GTID strict mode is automatically disabled when this field is set, as partial replication is incompatible with it.
+                        items:
+                          pattern: ^[^,.]+$
+                          type: string
+                        type: array
                       ignoredReplicaTables:
                         description: |-
                           IgnoredReplicaTables is an optional list of tables in "database.table" format to exclude from replication.
@@ -5506,6 +5536,13 @@ spec:
                       rule: '!(has(self.filteredReplicaTables) && size(self.filteredReplicaTables)
                         > 0 && has(self.ignoredReplicaTables) && size(self.ignoredReplicaTables)
                         > 0)'
+                    - message: filteredReplicaTables, ignoredReplicaTables, filteredReplicaDatabases
+                        and ignoredReplicaDatabases are mutually exclusive
+                      rule: '[has(self.filteredReplicaTables) && size(self.filteredReplicaTables)
+                        > 0, has(self.ignoredReplicaTables) && size(self.ignoredReplicaTables)
+                        > 0, has(self.filteredReplicaDatabases) && size(self.filteredReplicaDatabases)
+                        > 0, has(self.ignoredReplicaDatabases) && size(self.ignoredReplicaDatabases)
+                        > 0].filter(x, x).size() <= 1'
                   semiSyncAckTimeout:
                     description: |-
                       SemiSyncAckTimeout for the replica to acknowledge transactions to the primary.

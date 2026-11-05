@@ -73,6 +73,8 @@ type PodEnvironment struct {
 	MariaDBExternalReplServerIdOffset    string `env:"MARIADB_EXTERNAL_REPL_SERVER_ID_OFFSET"`
 	MariaDBExternalReplFilteredTables    string `env:"MARIADB_EXTERNAL_REPL_FILTERED_TABLES"`
 	MariaDBExternalReplIgnoredTables     string `env:"MARIADB_EXTERNAL_REPL_IGNORED_TABLES"`
+	MariaDBExternalReplFilteredDatabases string `env:"MARIADB_EXTERNAL_REPL_FILTERED_DATABASES"`
+	MariaDBExternalReplIgnoredDatabases  string `env:"MARIADB_EXTERNAL_REPL_IGNORED_DATABASES"`
 	MariaDBReplGtidStrictMode            string `env:"MARIADB_REPL_GTID_STRICT_MODE"`
 	MariaDBReplGtidDomainID              string `env:"MARIADB_REPL_GTID_DOMAIN_ID"`
 	MariaDBReplServerIDStartIndex        string `env:"MARIADB_REPL_SERVER_ID_START_INDEX"`
@@ -251,6 +253,24 @@ func (e *PodEnvironment) ExternalReplIgnoredTables() []string {
 		return nil
 	}
 	return strings.Split(e.MariaDBExternalReplIgnoredTables, ",")
+}
+
+// ExternalReplFilteredDatabases returns the list of databases to replicate,
+// or nil when filtered databases are not configured.
+func (e *PodEnvironment) ExternalReplFilteredDatabases() []string {
+	if e.MariaDBExternalReplFilteredDatabases == "" {
+		return nil
+	}
+	return strings.Split(e.MariaDBExternalReplFilteredDatabases, ",")
+}
+
+// ExternalReplIgnoredDatabases returns the list of databases to exclude from replication,
+// or nil when ignored databases are not configured.
+func (e *PodEnvironment) ExternalReplIgnoredDatabases() []string {
+	if e.MariaDBExternalReplIgnoredDatabases == "" {
+		return nil
+	}
+	return strings.Split(e.MariaDBExternalReplIgnoredDatabases, ",")
 }
 
 func GetPodEnv(ctx context.Context) (*PodEnvironment, error) {

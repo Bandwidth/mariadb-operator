@@ -715,6 +715,18 @@ func externalReplEnvVars(mariadb *mariadbv1alpha1.MariaDB) []corev1.EnvVar {
 			Value: strings.Join(ext.IgnoredReplicaTables, ","),
 		})
 	}
+	if ext.HasFilteredDatabases() {
+		env = append(env, corev1.EnvVar{
+			Name:  "MARIADB_EXTERNAL_REPL_FILTERED_DATABASES",
+			Value: strings.Join(ext.FilteredReplicaDatabases, ","),
+		})
+	}
+	if ext.HasIgnoredDatabases() {
+		env = append(env, corev1.EnvVar{
+			Name:  "MARIADB_EXTERNAL_REPL_IGNORED_DATABASES",
+			Value: strings.Join(ext.IgnoredReplicaDatabases, ","),
+		})
+	}
 	return env
 }
 

@@ -29,6 +29,15 @@ var galeraSystemTables = []string{
 	"mysql.wsrep_allowlist",
 }
 
+// ExcludeDatabaseOpt is an operator-specific mariadb-dump option, not a real mariadb-dump flag: it is never
+// forwarded to mariadb-dump. Each occurrence names a database to leave out of the dump, which then covers every other
+// database. mariadb-dump cannot exclude databases, so the list of databases to dump is resolved at runtime
+// from information_schema. It is ignored when the Backup selects databases or tables explicitly.
+const ExcludeDatabaseOpt = "--operator-exclude-database="
+
+// systemDatabasesNotDumped are skipped by mariadb-dump --all-databases and must stay out of an explicit --databases list.
+var systemDatabasesNotDumped = []string{"information_schema", "performance_schema"}
+
 type BackupOpts struct {
 	CommandOpts
 	Path                   string
@@ -252,6 +261,7 @@ func (b *BackupCommand) MariadbDump(backup *mariadbv1alpha1.Backup,
 	args := strings.Join(b.mariadbDumpArgs(backup, mariadb), " ")
 	tablesBySchema := groupTablesBySchema(backup.Spec.Tables)
 	isMultiSchema := len(tablesBySchema) > 1
+	excludedDatabases := b.excludedDatabases(backup)
 
 	cmds := []string{
 		"set -euo pipefail",
@@ -284,6 +294,21 @@ func (b *BackupCommand) MariadbDump(backup *mariadbv1alpha1.Backup,
 			),
 		)
 		dumpArgs = args + ` "${MARIADB_IGNORE_ARGS[@]}"`
+	}
+	if len(excludedDatabases) > 0 {
+		// The query must reach the server the same way the dump does, including TLS when the server requires it.
+		queryFlags := strings.Join(append([]string{connFlags}, b.tlsArgs(mariadb)...), " ")
+		// An empty list means the query failed or every database is excluded: fail instead of dumping nothing.
+		cmds = append(cmds,
+			"echo 💾 Building database list",
+			fmt.Sprintf(
+				`mapfile -t MARIADB_DB_ARGS < <(mariadb %s -BNe %s)`,
+				queryFlags,
+				shellSingleQuote(buildIncludedDatabasesQuery(excludedDatabases)),
+			),
+			`if [ "${#MARIADB_DB_ARGS[@]}" -eq 0 ]; then echo "no databases left to dump"; exit 1; fi`,
+		)
+		dumpArgs = args + ` --databases "${MARIADB_DB_ARGS[@]}"`
 	}
 
 	cmds = append(cmds,
@@ -626,8 +651,8 @@ func (b *BackupCommand) getTargetFilePath() string {
 }
 
 func (b *BackupCommand) mariadbDumpArgs(backup *mariadbv1alpha1.Backup, mariadb interfaces.MariaDBObject) []string {
-	dumpOpts := make([]string, len(b.ExtraOpts))
-	copy(dumpOpts, b.ExtraOpts)
+	_, dumpOpts := splitExcludedDatabases(b.ExtraOpts)
+	excludesDatabases := len(b.excludedDatabases(backup)) > 0
 
 	args := []string{
 		"--single-transaction",
@@ -663,6 +688,8 @@ func (b *BackupCommand) mariadbDumpArgs(backup *mariadbv1alpha1.Backup, mariadb 
 			db, _ := tableSelectionArgs(backup.Spec.Tables)
 			args = append(args, "--databases", db)
 		}
+	} else if excludesDatabases {
+		// The databases to dump are resolved at runtime, see MariadbDump.
 	} else if !hasDatabases {
 		args = append(args, "--all-databases")
 	}
@@ -705,6 +732,43 @@ func (b *BackupCommand) mariadbDumpArgs(backup *mariadbv1alpha1.Backup, mariadb 
 	}
 
 	return result
+}
+
+// splitExcludedDatabases separates the ExcludeDatabaseOpt entries from the rest of the options.
+func splitExcludedDatabases(opts []string) (excluded []string, rest []string) {
+	rest = make([]string, 0, len(opts))
+	for _, opt := range opts {
+		if name, ok := strings.CutPrefix(strings.TrimSpace(opt), ExcludeDatabaseOpt); ok {
+			excluded = append(excluded, trimQuotes(name))
+			continue
+		}
+		rest = append(rest, opt)
+	}
+	return excluded, rest
+}
+
+// excludedDatabases returns the databases to leave out of the dump. It is empty when the Backup selects
+// databases or tables explicitly, as the exclusion only applies to the "everything else" case.
+func (b *BackupCommand) excludedDatabases(backup *mariadbv1alpha1.Backup) []string {
+	if len(backup.Spec.Databases) > 0 || len(backup.Spec.Tables) > 0 {
+		return nil
+	}
+	excluded, _ := splitExcludedDatabases(b.ExtraOpts)
+	return excluded
+}
+
+// buildIncludedDatabasesQuery returns a SQL query that lists every database except the excluded ones
+// and the system databases mariadb-dump skips with --all-databases.
+func buildIncludedDatabasesQuery(excluded []string) string {
+	skipped := make([]string, 0, len(excluded)+len(systemDatabasesNotDumped))
+	for _, name := range append(append([]string{}, systemDatabasesNotDumped...), excluded...) {
+		name = strings.ReplaceAll(name, `\`, `\\`)
+		skipped = append(skipped, "'"+strings.ReplaceAll(name, "'", "''")+"'")
+	}
+	return fmt.Sprintf(
+		"SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN (%s) ORDER BY SCHEMA_NAME",
+		strings.Join(skipped, ","),
+	)
 }
 
 // groupTablesBySchema groups "db.table" entries into a map of schema → []table.
