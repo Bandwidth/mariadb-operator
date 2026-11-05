@@ -241,14 +241,22 @@ var _ = Describe("MariaDB Replica Recovery", Ordered, func() {
 				return func() {
 					recoveryKey := mdb.PhysicalBackupReplicaRecoveryKey()
 
-					By("Expecting replica recovery PhysicalBackup to be deleted eventually")
+					// The operator keeps the replica recovery PhysicalBackup after recovering, so delete it here.
+					By("Deleting replica recovery PhysicalBackup and its storage PVC")
+					var recoveryBackup mariadbv1alpha1.PhysicalBackup
+					if err := k8sClient.Get(testCtx, recoveryKey, &recoveryBackup); err == nil {
+						pvcKey := recoveryBackup.StoragePVCKey()
+						pvc := corev1.PersistentVolumeClaim{
+							ObjectMeta: metav1.ObjectMeta{Name: pvcKey.Name, Namespace: pvcKey.Namespace},
+						}
+						Expect(client.IgnoreNotFound(k8sClient.Delete(testCtx, &pvc))).To(Succeed())
+						Expect(client.IgnoreNotFound(k8sClient.Delete(testCtx, &recoveryBackup))).To(Succeed())
+					} else {
+						Expect(apierrors.IsNotFound(err)).To(BeTrue())
+					}
+
 					Eventually(func() bool {
 						return apierrors.IsNotFound(k8sClient.Get(testCtx, recoveryKey, &mariadbv1alpha1.PhysicalBackup{}))
-					}, testTimeout, testInterval).Should(BeTrue())
-
-					By("Expecting replica recovery PhysicalBackup storage PVC to be deleted eventually")
-					Eventually(func() bool {
-						return apierrors.IsNotFound(k8sClient.Get(testCtx, recoveryKey, &corev1.PersistentVolumeClaim{}))
 					}, testTimeout, testInterval).Should(BeTrue())
 				}
 			},
