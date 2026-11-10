@@ -675,3 +675,106 @@ func TestInmutableWebhookIgnoredReplicaTables(t *testing.T) {
 		})
 	}
 }
+
+func TestInmutableWebhookReplicaDatabases(t *testing.T) {
+	inmutableWebhook := webhook.NewInmutableWebhook(
+		webhook.WithTagName("webhook"),
+	)
+	newMariaDB := func(filtered, ignored []string) *mariadbv1alpha1.MariaDB {
+		return &mariadbv1alpha1.MariaDB{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: mariadbv1alpha1.MariaDBSpec{
+				Replication: &mariadbv1alpha1.Replication{
+					Enabled: true,
+					ReplicationSpec: mariadbv1alpha1.ReplicationSpec{
+						ReplicaFromExternal: &mariadbv1alpha1.ReplicaFromExternal{
+							FilteredReplicaDatabases: filtered,
+							IgnoredReplicaDatabases:  ignored,
+						},
+					},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name        string
+		oldFiltered []string
+		newFiltered []string
+		oldIgnored  []string
+		newIgnored  []string
+		wantErr     bool
+	}{
+		{
+			name:        "not set",
+			oldFiltered: nil,
+			newFiltered: nil,
+			wantErr:     false,
+		},
+		{
+			name:        "filtered unchanged",
+			oldFiltered: []string{"lerg", "lerg_a"},
+			newFiltered: []string{"lerg", "lerg_a"},
+			wantErr:     false,
+		},
+		{
+			name:        "filtered database added",
+			oldFiltered: []string{"lerg"},
+			newFiltered: []string{"lerg", "lerg_a"},
+			wantErr:     true,
+		},
+		{
+			name:        "filtered set on an existing cluster",
+			oldFiltered: nil,
+			newFiltered: []string{"lerg"},
+			wantErr:     true,
+		},
+		{
+			name:        "filtered removed",
+			oldFiltered: []string{"lerg"},
+			newFiltered: nil,
+			wantErr:     true,
+		},
+		{
+			name:       "ignored unchanged",
+			oldIgnored: []string{"scratch"},
+			newIgnored: []string{"scratch"},
+			wantErr:    false,
+		},
+		{
+			name:       "ignored database replaced",
+			oldIgnored: []string{"scratch"},
+			newIgnored: []string{"tmp"},
+			wantErr:    true,
+		},
+		{
+			name:       "ignored set on an existing cluster",
+			oldIgnored: nil,
+			newIgnored: []string{"scratch"},
+			wantErr:    true,
+		},
+		{
+			name:       "ignored removed",
+			oldIgnored: []string{"scratch"},
+			newIgnored: nil,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := inmutableWebhook.ValidateUpdate(
+				newMariaDB(tt.newFiltered, tt.newIgnored),
+				newMariaDB(tt.oldFiltered, tt.oldIgnored),
+			)
+			if tt.wantErr && err == nil {
+				t.Error("expect error to have occurred, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("expect error to not have occurred, got: %v", err)
+			}
+		})
+	}
+}

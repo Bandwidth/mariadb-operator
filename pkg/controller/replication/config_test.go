@@ -386,6 +386,43 @@ replicate_ignore_table=db.t2
 `,
 			wantErr: false,
 		},
+		{
+			name: "filtered databases",
+			env: &env.PodEnvironment{
+				PodName:                              "mariadb-0",
+				MariadbName:                          "mariadb",
+				MariaDBReplEnabled:                   "true",
+				MariaDBReplSemiSyncEnabled:           "false",
+				MariaDBExternalReplFilteredDatabases: "lerg,lerg_a,lerg_b",
+			},
+			wantConfig: `[mariadb]
+log_bin
+log_basename=mariadb
+server_id=10
+replicate_do_db=lerg
+replicate_do_db=lerg_a
+replicate_do_db=lerg_b
+`,
+			wantErr: false,
+		},
+		{
+			name: "ignored databases",
+			env: &env.PodEnvironment{
+				PodName:                             "mariadb-0",
+				MariadbName:                         "mariadb",
+				MariaDBReplEnabled:                  "true",
+				MariaDBReplSemiSyncEnabled:          "false",
+				MariaDBExternalReplIgnoredDatabases: "scratch,tmp",
+			},
+			wantConfig: `[mariadb]
+log_bin
+log_basename=mariadb
+server_id=10
+replicate_ignore_db=scratch
+replicate_ignore_db=tmp
+`,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

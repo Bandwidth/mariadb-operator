@@ -108,6 +108,36 @@ var (
 		Namespace: testNamespace,
 	}
 
+	testMdbERFilteredDbsKey = types.NamespacedName{
+		Name:      "mariadb-repl-ext-filtered-dbs",
+		Namespace: testNamespace,
+	}
+
+	testMdbPbRecoveryERFilteredDbsKey = types.NamespacedName{
+		Name:      testMdbERFilteredDbsKey.Name + "-pb-recovery",
+		Namespace: testNamespace,
+	}
+
+	testPbTemplateERFilteredDbsKey = types.NamespacedName{
+		Name:      testMdbERFilteredDbsKey.Name + "-backup-template",
+		Namespace: testNamespace,
+	}
+
+	testMdbERIgnoredDbsKey = types.NamespacedName{
+		Name:      "mariadb-repl-ext-ignored-dbs",
+		Namespace: testNamespace,
+	}
+
+	testMdbPbRecoveryERIgnoredDbsKey = types.NamespacedName{
+		Name:      testMdbERIgnoredDbsKey.Name + "-pb-recovery",
+		Namespace: testNamespace,
+	}
+
+	testPbTemplateERIgnoredDbsKey = types.NamespacedName{
+		Name:      testMdbERIgnoredDbsKey.Name + "-backup-template",
+		Namespace: testNamespace,
+	}
+
 	testMdbERMultiSchemaKey = types.NamespacedName{
 		Name:      "mariadb-repl-ext-multi-schema",
 		Namespace: testNamespace,
