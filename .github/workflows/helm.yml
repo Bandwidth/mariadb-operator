@@ -51,7 +51,7 @@ jobs:
 
   lint-crds:
     name: CRDs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CT_CONFIG: hack/config/chart-testing/mariadb-operator-crds.yaml
     steps:
@@ -94,7 +94,7 @@ jobs:
 
   lint-operator:
     name: Operator
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CT_CONFIG: hack/config/chart-testing/mariadb-operator.yaml
     steps:
@@ -139,7 +139,7 @@ jobs:
         run: ct install --config $CT_CONFIG --helm-extra-set-args "--set=crds.enabled=true"
 
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs:
       - lint-cluster
       - lint-crds
